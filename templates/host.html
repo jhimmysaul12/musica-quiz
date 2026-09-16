@@ -33,6 +33,11 @@
   <h2 id="results-correct"></h2>
   <p id="results-explanation" class="hint"></p>
   <div id="results-distribution"></div>
+
+  <!-- 🏁 Carrera de avatares: cada avatar avanza según su puntaje -->
+  <h3>🏁 Carrera de avatares</h3>
+  <div id="race-track" class="race-track"></div>
+
   <h3>Ranking</h3>
   <ol id="ranking-list" class="player-list" style="text-align:left;"></ol>
   <button id="next-question-btn">Siguiente pregunta</button>
@@ -41,6 +46,8 @@
 <!-- GAME OVER -->
 <div id="game-over-view" style="display:none;">
   <h1>🏆 Resultados finales</h1>
+  <h3>🏁 Carrera final</h3>
+  <div id="go-race" class="race-track"></div>
   <div class="podium" id="podium"></div>
   <ol id="final-list" class="player-list" style="text-align:left;"></ol>
   <button onclick="window.location.href='/host'">Nueva partida</button>
@@ -154,6 +161,31 @@ function showRanking(listEl, players) {
   });
 }
 
+/* 🏁 Carrera de avatares: distancia = puntaje */
+function renderRaceTrack(leaderboard, trackElId = 'race-track') {
+  const track = document.getElementById(trackElId);
+  if (!track) return;
+  const maxScore = Math.max(1, ...leaderboard.map(p => p.score));
+  track.innerHTML = '';
+  leaderboard.forEach((p) => {
+    const lane = document.createElement('div');
+    lane.className = 'race-lane';
+    const pct = Math.min(100, (p.score / maxScore) * 92);  // 92% deja margen para el emoji
+    lane.innerHTML = `
+      <div class="race-lane-inner">
+        <div class="race-runner" style="left:${pct}%">${p.avatar || '✝️'}</div>
+        <div class="race-flag">🏁</div>
+      </div>
+      <span class="race-lane-label">${p.nickname} · ${p.score} pts</span>`;
+    // animación de desplazamiento
+    lane.querySelector('.race-runner').style.transition = 'left 1.2s cubic-bezier(.2,.8,.2,1)';
+    track.appendChild(lane);
+  });
+}
+
+/* alias para la pista final del game-over */
+function renderRaceTrackGo(leaderboard) { renderRaceTrack(leaderboard, 'go-race'); }
+
 function confetti() {
   for (let i = 0; i < 40; i++) {
     const c = document.createElement('div');
@@ -199,6 +231,7 @@ socket.on('show_results', (data) => {
       </div><span>${n}</span>`;
     dist.appendChild(w);
   });
+  renderRaceTrack(data.leaderboard);
   showRanking(document.getElementById('ranking-list'), data.leaderboard);
 });
 
@@ -222,6 +255,8 @@ socket.on('game_over', (lb) => {
     pod.appendChild(d);
   });
   showRanking(document.getElementById('final-list'), lb);
+  // carrera final en la pista del game-over
+  renderRaceTrackGo(lb);
 });
 
 socket.on('game_reset', () => { alert('La partida se cerró.'); location.reload(); });
