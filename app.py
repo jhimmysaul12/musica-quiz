@@ -661,5 +661,12 @@ if __name__ == '__main__':
     print(f"Editor:               http://localhost:5000/editor")
     print(f"Jugadores:            http://{get_local_ip()}:5000/join")
     print("=" * 50)
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False,
-                 allow_unsafe_werkzeug=True)
+    import os as _os
+    _port = int(_os.environ.get('PORT', 5000))
+    print(f"Jugadores:            https://<TU-URL-RENDER>/join")
+    print("=" * 50)
+    if _os.environ.get('ON_RENDER'):
+        socketio.run(app, host='0.0.0.0', port=_port)
+    else:
+        socketio.run(app, host='0.0.0.0', port=_port, debug=False,
+                     allow_unsafe_werkzeug=True)
