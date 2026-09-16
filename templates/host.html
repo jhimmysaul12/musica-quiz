@@ -44,6 +44,7 @@
   <div class="podium" id="podium"></div>
   <ol id="final-list" class="player-list" style="text-align:left;"></ol>
   <button onclick="window.location.href='/host'">Nueva partida</button>
+  <button onclick="window.location.href='/editor'">✏️ Panel de preguntas</button>
 </div>
 {% endblock %}
 
@@ -68,9 +69,13 @@ function renderPlayers(players) {
   const list = document.getElementById('player-list');
   if (!list) return;
   list.innerHTML = '';
-  players.forEach(p => {
+  const sorted = players.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+  sorted.forEach((p, i) => {
     const li = document.createElement('li');
-    li.textContent = typeof p === 'string' ? p : p.nickname;
+    li.className = 'player-row';
+    li.innerHTML = `<span class="p-avatar">${(typeof p === 'string' ? '✝️' : (p.avatar || '✝️'))}</span>
+      <span class="p-name">${i + 1}. ${typeof p === 'string' ? p : p.nickname}</span>
+      <span class="p-score">${(typeof p === 'string' ? '' : (p.score || 0) + ' pts')}</span>`;
     list.appendChild(li);
   });
   if (startBtn) {
@@ -141,7 +146,10 @@ function showRanking(listEl, players) {
   listEl.innerHTML = '';
   players.forEach((p, i) => {
     const li = document.createElement('li');
-    li.textContent = `${i+1}. ${p.nickname}: ${p.score} pts`;
+    li.className = 'player-row';
+    li.innerHTML = `<span class="p-avatar">${p.avatar || '✝️'}</span>
+      <span class="p-name">${i+1}. ${p.nickname}</span>
+      <span class="p-score">${p.score} pts</span>`;
     listEl.appendChild(li);
   });
 }

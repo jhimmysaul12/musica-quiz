@@ -11,15 +11,22 @@
   <br>
   <input type="text" id="nickname-input" placeholder="Tu nombre" maxlength="20">
   <br>
+  <p class="hint">Elige tu avatar bíblico:</p>
+  <div id="avatar-grid" class="avatar-grid"></div>
   <button id="join-btn">Entrar</button>
   <p id="join-error" style="color:#dc2626; font-weight:700;"></p>
 </div>
 
 <!-- WAIT -->
 <div id="wait-view" style="display:none;">
+  <div class="my-avatar-big" id="my-avatar">✝️</div>
   <h2>¡Hola, <span id="nickname-display"></span>!</h2>
   <p>Aguarda a que el anfitrión inicie el juego…</p>
-  <p class="hint">Se han conectado <span id="lobby-count">0</span> jugadores.</p>
+  <p class="hint">Jugadores conectados: <span id="lobby-count">0</span></p>
+
+  <!-- Lista en vivo de participantes -->
+  <h3>👥 Participantes</h3>
+  <ul id="player-list" class="player-list"></ul>
 </div>
 
 <!-- PREGUNTA -->
@@ -33,6 +40,11 @@
   <h3 id="question-text"></h3>
   <img id="question-image" class="q-image" src="" style="display:none;">
   <div id="options-grid" class="grid-options"></div>
+  <div class="live-mini">
+    <p>Su puntuación: <strong id="live-score">0</strong>
+       · Posición: <strong id="live-pos">—</strong></p>
+    <ul id="live-rank" class="mini-rank"></ul>
+  </div>
 </div>
 
 <!-- RESULTADO -->
@@ -41,6 +53,9 @@
   <p id="result-pts" class="hint"></p>
   <p>Tu puntuación: <strong id="score-display">0</strong></p>
   <p id="streak-display" class="hint"></p>
+
+  <h3>🏆 Ranking — ¿quién va primero?</h3>
+  <ol id="result-rank" class="player-list"></ol>
 </div>
 
 <!-- GAME OVER -->
@@ -48,6 +63,7 @@
   <h2 id="gameover-text"></h2>
   <p>Tu posición: <strong id="my-position"></strong></p>
   <p>Tus puntos: <strong id="go-score"></strong></p>
+  <ol id="go-rank" class="player-list"></ol>
 </div>
 {% endblock %}
 
@@ -67,6 +83,28 @@ const timerBar = document.getElementById('timer-bar');
 let timerIv = null;
 let mySid = null;
 let myName = null;
+let myAvatar = '✝️';
+
+/* ---- Avatares bíblicos ---- */
+const AVATARS = ['✝️','🕊️','🌊','🔥','👑','🐑','🦁','🌈',
+                 '⛰️','🕯️','📜','⭐','🍇','🗡️','🐟','🌴'];
+let chosenAvatar = localStorage.getItem('mqAvatar') || '';
+
+const avatarGrid = document.getElementById('avatar-grid');
+AVATARS.forEach(a => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'avatar-btn' + (a === chosenAvatar ? ' avatar-selected' : '');
+  b.textContent = a;
+  b.setAttribute('aria-label', 'Avatar ' + a);
+  b.addEventListener('click', () => {
+    chosenAvatar = a;
+    localStorage.setItem('mqAvatar', a);
+    avatarGrid.querySelectorAll('.avatar-btn').forEach(x => x.classList.remove('avatar-selected'));
+    b.classList.add('avatar-selected');
+  });
+  avatarGrid.appendChild(b);
+});
 
 // restaura PIN si existe
 const savedPin = localStorage.getItem('mqPin');
@@ -85,8 +123,9 @@ function doJoin() {
   }
   localStorage.setItem('mqPin', pin);
   localStorage.setItem('mqNick', nickname);
+  localStorage.setItem('mqAvatar', chosenAvatar);
   joinBtn.disabled = true;
-  socket.emit('player_join', { pin, nickname });
+  socket.emit('player_join', { pin, nickname, avatar: chosenAvatar });
 }
 
 socket.on('connect', () => { mySid = socket.id; });
@@ -96,6 +135,7 @@ socket.on('join_success', (d) => {
   joinView.style.display = 'none';
   waitView.style.display = 'block';
   document.getElementById('nickname-display').textContent = d.nickname;
+  document.getElementById('my-avatar').textContent = myAvatar;
 });
 
 socket.on('join_failed', (d) => {
@@ -104,10 +144,30 @@ socket.on('join_failed', (d) => {
   localStorage.removeItem('mqPin');
 });
 
-// cuenta jugadores en lobby (host emite update_player_list a toda la sala)
+/* lista de jugadores ordenada con avatar y puntos */
+function renderPlayerList(players, listId, ordered) {
+  const ul = document.getElementById(listId);
+  if (!ul) return;
+  let arr = players.slice();
+  if (ordered) arr.sort((a, b) => (b.score || 0) - (a.score || 0));
+  ul.innerHTML = '';
+  arr.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.className = 'player-row';
+    const rank = ordered ? `${i + 1}.` : '';
+    li.innerHTML = `<span class="p-avatar">${p.avatar || '✝️'}</span>
+      <span class="p-name">${rank} ${p.nickname}</span>
+      <span class="p-score">${p.score || 0} pts</span>`;
+    ul.appendChild(li);
+  });
+}
+
+// en lobby o updates en vivo
 socket.on('update_player_list', (players) => {
   const c = document.getElementById('lobby-count');
   if (c) c.textContent = players.length;
+  // se muestra también en la sala de espera (orden alfabético/natural)
+  renderPlayerList(players, 'player-list', false);
 });
 
 function showQuestion(data) {
@@ -187,29 +247,45 @@ socket.on('answer_rejected', (d) => {
   grid.querySelectorAll('button').forEach(b => b.disabled = false);
 });
 
+/* mini ranking en vivo mientras se responde */
+function updateLiveRank(players) {
+  const my = players.find(p => p.nickname === myName);
+  if (my) document.getElementById('live-score').textContent = my.score || 0;
+  const sorted = players.slice().sort((a, b) => (b.score||0) - (a.score||0));
+  const pos = my ? sorted.findIndex(p => p.nickname === myName) + 1 : null;
+  document.getElementById('live-pos').textContent = pos ? `#${pos}` : '—';
+  const ul = document.getElementById('live-rank');
+  if (!ul) return;
+  ul.innerHTML = '';
+  sorted.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="p-avatar">${p.avatar || '✝️'}</span>
+      <span class="p-name">${i + 1}. ${p.nickname}</span>
+      <span class="p-score">${p.score || 0} pts</span>`;
+    ul.appendChild(li);
+  });
+}
+
 socket.on('show_results', (data) => {
   qView.style.display = 'none';
   rView.style.display = 'block';
   clearInterval(timerIv);
   const myScore = data.scores[mySid] || 0;
   document.getElementById('score-display').textContent = myScore;
-  const p = data.players.find(x => x.nickname === myName);
+  // el servidor ahora manda streak/last_pts/last_correct
+  const p2 = data.players.find(x => x.nickname === myName);
   const lb = data.leaderboard;
   const pos = lb.findIndex(x => x.nickname === myName) + 1;
-  // info extra por jugador aún no disponible en el payload (streak/pts): ampliar server luego
-  const p2 = data.players.find(x => x.nickname === myName);
-  if (p2 && p2.last_correct !== undefined) {
+  if (p2) {
     document.getElementById('result-text').textContent = p2.last_correct ? '¡Correcto! 🎉' : 'Incorrecto 😢';
     document.getElementById('result-pts').textContent = p2.last_pts ? `+${p2.last_pts} pts` : '';
     document.getElementById('streak-display').textContent = p2.streak > 1 ? `Racha x${p2.streak} 🔥` : '';
     if (p2.last_correct) SFX.correct(); else SFX.wrong();
-  } else {
-    document.getElementById('result-text').textContent =
-      lb[0] && lb[0].nickname === myName ? '¡Vas primero! 🥇' : 'Esperando resultados…';
   }
-  // guarda posición si es el fin
+  // ranking completo con avatares y quién va primero
+  renderPlayerList(lb, 'result-rank', false);
   if (document.getElementById('my-position')) {
-    document.getElementById('my-position').textContent = pos ? `#${pos + 0}` : '—';
+    document.getElementById('my-position').textContent = pos ? `#${pos}` : '—';
   }
 });
 
@@ -226,6 +302,7 @@ socket.on('game_over', (lb) => {
     pos ? lb[pos-1].score + ' pts' : '0 pts';
   if (pos === 1) { SFX.victory(); confetti(); }
   else SFX.correct();
+  renderPlayerList(lb, 'go-rank', false);
 });
 
 function confetti() {

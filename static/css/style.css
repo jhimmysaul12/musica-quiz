@@ -111,6 +111,41 @@ input:focus, textarea:focus { border-color: #a855f7; box-shadow: 0 0 10px rgba(1
 }
 @keyframes popIn { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+/* ---- Avatares bíblicos ---- */
+.avatar-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; max-width: 380px; margin: 10px auto; }
+@media (max-width: 480px) { .avatar-grid { grid-template-columns: repeat(6, 1fr); } }
+.avatar-btn {
+  background: #f5f3ff;
+  border: 2px solid #ddd6fe;
+  border-radius: 12px;
+  font-size: 1.6rem;
+  padding: 8px 0;
+  cursor: pointer;
+  transition: transform .15s, border-color .15s;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.avatar-btn:hover { transform: scale(1.12); border-color: #a855f7; }
+.avatar-selected { background: #a855f7; border-color: #7c3aed; transform: scale(1.1); }
+.my-avatar-big { font-size: 4.5rem; margin: 4px 0; }
+
+.player-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; text-align: left;
+}
+.p-avatar { font-size: 1.5rem; flex: 0 0 auto; }
+.p-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-score { flex: 0 0 auto; color: #7c3aed; font-size: .9rem; }
+
+/* ranking compacto para el jugador en pantalla de pregunta */
+.live-mini { background: #faf5ff; border-radius: 12px; padding: 10px 14px; margin-top: 14px; }
+.mini-rank, #result-rank, #go-rank { max-height: 190px; overflow-y: auto; list-style-position: outside; }
+.mini-rank li, #result-rank li, #go-rank li {
+  text-align: left; background: #fff;
+  border: 1px solid #eee;
+  margin: 5px 0; padding: 8px 12px; border-radius: 999px;
+}
+
 /* ---- Podio ---- */
 .podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin-top: 24px; }
 .podium-slot { width: 110px; }

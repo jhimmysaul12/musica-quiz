@@ -96,7 +96,7 @@ class GameState:
     def __init__(self, quiz_name: str, host_sid: str):
         self.host_sid = host_sid
         self.quiz_name = quiz_name
-        self.players = {}       # sid -> {nickname, score, streak, last_pts}
+        self.players = {}       # sid -> {nickname, avatar, score, streak, last_pts}
         self.answers = {}       # sid -> option_index
         self.answer_times = {}  # sid -> segundos restantes al responder
         self.current_question = -1
@@ -107,10 +107,19 @@ class GameState:
         self.tokens = {}        # session_token -> sid
 
     def leaderboard(self):
-        lb = [{'nickname': p['nickname'], 'score': p['score'],
-               'streak': p['streak']} for p in self.players.values()]
+        lb = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '✝️'),
+               'score': p['score'], 'streak': p['streak']}
+              for p in self.players.values()]
         lb.sort(key=lambda x: x['score'], reverse=True)
         return lb
+
+    def players_list(self):
+        """Lista de jugadores con avatar, ordenada por puntuación (en juego)."""
+        pl = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '✝️'),
+               'score': p['score'], 'streak': p.get('streak', 0)}
+              for p in self.players.values()]
+        pl.sort(key=lambda x: x['score'], reverse=True)
+        return pl
 
     def reset_round(self):
         self.answers = {}
@@ -166,21 +175,31 @@ def player_join_page():
     return render_template('player.html')
 
 
-@app.route('/host/<pin>')
-def host_view(pin):
-    local_ip = get_local_ip()
-    return render_template('host.html', pin=pin, host_ip=local_ip)
-
-
 @app.route('/host')
 def host_new_game():
+    # El anfitrión necesita contraseña (equivale al acceso admin)
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login', next='host'))
     local_ip = get_local_ip()
     return render_template('host_new.html', host_ip=local_ip)
 
 
+@app.route('/host/<pin>')
+def host_view(pin):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login', next=f'host/{pin}'))
+    local_ip = get_local_ip()
+    return render_template('host.html', pin=pin, host_ip=local_ip)
+
+
 @app.route('/editor')
 def editor_view():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login', next='editor'))
     return render_template('editor.html')
+
+
+HOST_SESSION_LIFETIME = 60 * 60 * 12  # 12 horas
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
@@ -189,9 +208,15 @@ def admin_login():
         password = request.form.get('password', '')
         if hashlib.sha256(password.encode('utf-8')).hexdigest() == ADMIN_PASSWORD:
             session['admin_logged_in'] = True
+            session.permanent = True
+            app.permanent_session_lifetime = HOST_SESSION_LIFETIME
+            nxt = request.form.get('next', '')
+            if nxt.startswith('host') or nxt == 'editor':
+                return redirect('/' + nxt)
             return redirect(url_for('admin_view'))
         flash('Contraseña incorrecta', 'error')
-    return render_template('admin_login.html')
+    return render_template('admin_login.html',
+                           next=request.args.get('next', ''))
 
 
 @app.route('/admin')
@@ -434,7 +459,7 @@ def on_disconnect():
                 del game.answers[sid]
             emit('player_left', {'nickname': nick}, to=pin)
             socketio.emit('update_player_list',
-                          list(game.players.values()), to=pin)
+                          game.players_list(), to=pin)
             print(f"Jugador {nick} salió de {pin}")
 
 
@@ -477,23 +502,37 @@ def on_host_join(data):
     emit('host_ready', {'pin': pin}, to=request.sid)
 
 
+# Avatares bíblicos (emoji) que los jugadores pueden escoger
+BIBLE_AVATARS = [
+    '✝️', '🕊️', '🌊', '🔥', '👑', '🐑', '🦁', '🌈',
+    '⛰️', '🕯️', '📜', '⭐', '🍇', '🗡️', '🐟', '🌴',
+]
+
+
 @socketio.on('player_join')
 def on_player_join(data):
-    """Jugador entra con PIN y nombre (sin cuenta)."""
+    """Jugador entra con PIN, nombre y avatar (sin cuenta)."""
     pin = str((data or {}).get('pin', '')).strip()
     nickname = (data or {}).get('nickname', '').strip()[:20]
+    avatar = (data or {}).get('avatar', '')[:8]
     if not nickname:
         return emit('join_failed', {'reason': 'Escribe tu nombre'})
+    if avatar not in BIBLE_AVATARS:
+        avatar = BIBLE_AVATARS[0]
     game = GAMES.get(pin)
     if game is None:
         return emit('join_failed', {'reason': 'PIN no válido'})
     if game.state != STATE_LOBBY:
         return emit('join_failed', {'reason': 'La partida ya empezó'})
+    # mismo avatar no se repite dentro de la sala
+    if any(p.get('avatar') == avatar for p in game.players.values()):
+        return emit('join_failed', {'reason': 'Ese avatar ya fue elegido — elige otro'})
     existing = [p['nickname'].lower() for p in game.players.values()]
     if nickname.lower() in existing:
         return emit('join_failed', {'reason': 'Nombre ya en uso'})
     game.players[request.sid] = {
         'nickname': nickname,
+        'avatar': avatar,
         'score': 0,
         'streak': 0,
         'last_pts': 0,
@@ -505,8 +544,8 @@ def on_player_join(data):
     game.tokens[token] = request.sid
     emit('join_success', {'nickname': nickname, 'token': token,
                           'pin': pin}, to=request.sid)
-    socketio.emit('update_player_list', list(game.players.values()), to=pin)
-    print(f"Jugador '{nickname}' entró a {pin}")
+    socketio.emit('update_player_list', game.players_list(), to=pin)
+    print(f"Jugador '{nickname}' ({avatar}) entró a {pin}")
 
 
 @socketio.on('start_game')
@@ -630,7 +669,10 @@ def reveal_results(pin: str, auto=False):
         'explanation': q.get('explanation', ''),
         'distribution': distribution,
         'scores': {sid: p['score'] for sid, p in game.players.items()},
-        'players': [{'nickname': p['nickname'], 'score': p['score']}
+        'players': [{'nickname': p['nickname'], 'avatar': p.get('avatar', '✝️'),
+                     'score': p['score'], 'streak': p.get('streak', 0),
+                     'last_pts': p.get('last_pts', 0),
+                     'last_correct': p.get('last_correct', False)}
                     for p in game.players.values()],
         'leaderboard': game.leaderboard()[:10],
     }, to=pin)

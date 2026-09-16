@@ -2,9 +2,11 @@
 {% block title %}Login admin{% endblock %}
 
 {% block content %}
-<h1>🔐 Admin</h1>
+<h1>🔐 Anfitrión</h1>
+<p class="hint">Acceso del anfitrión: introduce la contraseña.</p>
 <form method="POST" style="display:contents;">
-  <input type="password" name="password" placeholder="Contraseña">
+  <input type="password" name="password" placeholder="Contraseña del anfitrión">
+  <input type="hidden" name="next" value="{{ next or '' }}">
   <br>
   <button type="submit">Entrar</button>
 </form>
