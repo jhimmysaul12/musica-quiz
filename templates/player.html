@@ -1,0 +1,246 @@
+{% extends "layout.html" %}
+{% block title %}Jugar — Música Quiz{% endblock %}
+
+{% block content %}
+<!-- JOIN -->
+<div id="join-view">
+  <h1>🎵 Música Quiz</h1>
+  <p>¿Cuánto sabemos de música?</p>
+  <input type="text" id="pin-input" placeholder="PIN de la sala" maxlength="4"
+         inputmode="numeric" autocomplete="off" value="{{ request.args.get('pin','') }}">
+  <br>
+  <input type="text" id="nickname-input" placeholder="Tu nombre" maxlength="20">
+  <br>
+  <button id="join-btn">Entrar</button>
+  <p id="join-error" style="color:#dc2626; font-weight:700;"></p>
+</div>
+
+<!-- WAIT -->
+<div id="wait-view" style="display:none;">
+  <h2>¡Hola, <span id="nickname-display"></span>!</h2>
+  <p>Aguarda a que el anfitrión inicie el juego…</p>
+  <p class="hint">Se han conectado <span id="lobby-count">0</span> jugadores.</p>
+</div>
+
+<!-- PREGUNTA -->
+<div id="question-view" style="display:none;">
+  <div class="chips">
+    <span class="chip chip-cat" id="q-category"></span>
+    <span class="chip" id="q-difficulty"></span>
+  </div>
+  <span class="timer-num" id="timer-num"></span>
+  <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar"></div></div>
+  <h3 id="question-text"></h3>
+  <img id="question-image" class="q-image" src="" style="display:none;">
+  <div id="options-grid" class="grid-options"></div>
+</div>
+
+<!-- RESULTADO -->
+<div id="result-view" style="display:none;">
+  <h2 id="result-text"></h2>
+  <p id="result-pts" class="hint"></p>
+  <p>Tu puntuación: <strong id="score-display">0</strong></p>
+  <p id="streak-display" class="hint"></p>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameover-view" style="display:none;">
+  <h2 id="gameover-text"></h2>
+  <p>Tu posición: <strong id="my-position"></strong></p>
+  <p>Tus puntos: <strong id="go-score"></strong></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const joinView = document.getElementById('join-view');
+const waitView = document.getElementById('wait-view');
+const qView = document.getElementById('question-view');
+const rView = document.getElementById('result-view');
+const goView = document.getElementById('gameover-view');
+
+const pinInput = document.getElementById('pin-input');
+const nickInput = document.getElementById('nickname-input');
+const joinBtn = document.getElementById('join-btn');
+const timerNum = document.getElementById('timer-num');
+const timerBar = document.getElementById('timer-bar');
+let timerIv = null;
+let mySid = null;
+let myName = null;
+
+// restaura PIN si existe
+const savedPin = localStorage.getItem('mqPin');
+if (savedPin && !pinInput.value) pinInput.value = savedPin;
+
+joinBtn.addEventListener('click', doJoin);
+nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+pinInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+
+function doJoin() {
+  const pin = pinInput.value.trim();
+  const nickname = nickInput.value.trim();
+  if (!pin || !nickname) {
+    document.getElementById('join-error').textContent = 'Completa PIN y nombre.';
+    return;
+  }
+  localStorage.setItem('mqPin', pin);
+  localStorage.setItem('mqNick', nickname);
+  joinBtn.disabled = true;
+  socket.emit('player_join', { pin, nickname });
+}
+
+socket.on('connect', () => { mySid = socket.id; });
+
+socket.on('join_success', (d) => {
+  myName = d.nickname;
+  joinView.style.display = 'none';
+  waitView.style.display = 'block';
+  document.getElementById('nickname-display').textContent = d.nickname;
+});
+
+socket.on('join_failed', (d) => {
+  document.getElementById('join-error').textContent = d.reason || 'Error';
+  joinBtn.disabled = false;
+  localStorage.removeItem('mqPin');
+});
+
+// cuenta jugadores en lobby (host emite update_player_list a toda la sala)
+socket.on('update_player_list', (players) => {
+  const c = document.getElementById('lobby-count');
+  if (c) c.textContent = players.length;
+});
+
+function showQuestion(data) {
+  waitView.style.display = 'none';
+  rView.style.display = 'none';
+  qView.style.display = 'block';
+  SFX.newQuestion();
+
+  document.getElementById('q-category').textContent = data.category;
+  const diffEl = document.getElementById('q-difficulty');
+  diffEl.textContent = data.difficulty;
+  diffEl.className = 'chip chip-' + (data.difficulty === 'fácil' ? 'easy' : data.difficulty === 'difícil' ? 'hard' : 'med');
+  document.getElementById('question-text').textContent = data.text;
+
+  const img = document.getElementById('question-image');
+  if (data.image) { img.src = data.image; img.style.display = 'block'; }
+  else img.style.display = 'none';
+
+  // Audio de la pregunta (escuchar snippet y responder)
+  const oldAudio = document.getElementById('player-question-audio');
+  if (oldAudio) oldAudio.remove();
+  if (data.audio) {
+    const a = document.createElement('audio');
+    a.id = 'player-question-audio';
+    a.controls = true;
+    a.src = data.audio;
+    a.style.cssText = 'width:100%; max-width:380px; margin:6px auto; display:block;';
+    document.getElementById('options-grid').insertAdjacentElement('beforebegin', a);
+  }
+
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  const letters = ['A','B','C','D'];
+  data.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.classList.add('option-btn');
+    btn.textContent = `${letters[i]||'?'} — ${opt}`;
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      socket.emit('submit_answer', { option_index: i });
+      btn.style.outline = '4px solid #fff';
+      grid.querySelectorAll('button').forEach(b => b.disabled = true);
+    });
+    grid.appendChild(btn);
+  });
+
+  // animation timer
+  let left = data.time;
+  timerNum.textContent = left;
+  timerBar.style.transition = 'none';
+  timerBar.style.width = '100%';
+  requestAnimationFrame(() => { timerBar.style.transition = 'width 1s linear'; });
+  if (timerIv) clearInterval(timerIv);
+  timerIv = setInterval(() => {
+    left--;
+    if (left >= 0) {
+      timerNum.textContent = left;
+      timerBar.style.width = (left / data.time * 100) + '%';
+      if (left <= 5 && left > 0) SFX.tick();
+    } else clearInterval(timerIv);
+  }, 1000);
+}
+
+socket.on('show_question', showQuestion);
+
+socket.on('time_up', () => { if (timerIv) clearInterval(timerIv); });
+
+socket.on('answer_received', () => {
+  clearInterval(timerIv);
+  const grid = document.getElementById('options-grid');
+  grid.querySelectorAll('button').forEach(b => b.disabled = true);
+});
+
+socket.on('answer_rejected', (d) => {
+  alert(d.reason || 'No se pudo responder');
+  const grid = document.getElementById('options-grid');
+  grid.querySelectorAll('button').forEach(b => b.disabled = false);
+});
+
+socket.on('show_results', (data) => {
+  qView.style.display = 'none';
+  rView.style.display = 'block';
+  clearInterval(timerIv);
+  const myScore = data.scores[mySid] || 0;
+  document.getElementById('score-display').textContent = myScore;
+  const p = data.players.find(x => x.nickname === myName);
+  const lb = data.leaderboard;
+  const pos = lb.findIndex(x => x.nickname === myName) + 1;
+  // info extra por jugador aún no disponible en el payload (streak/pts): ampliar server luego
+  const p2 = data.players.find(x => x.nickname === myName);
+  if (p2 && p2.last_correct !== undefined) {
+    document.getElementById('result-text').textContent = p2.last_correct ? '¡Correcto! 🎉' : 'Incorrecto 😢';
+    document.getElementById('result-pts').textContent = p2.last_pts ? `+${p2.last_pts} pts` : '';
+    document.getElementById('streak-display').textContent = p2.streak > 1 ? `Racha x${p2.streak} 🔥` : '';
+    if (p2.last_correct) SFX.correct(); else SFX.wrong();
+  } else {
+    document.getElementById('result-text').textContent =
+      lb[0] && lb[0].nickname === myName ? '¡Vas primero! 🥇' : 'Esperando resultados…';
+  }
+  // guarda posición si es el fin
+  if (document.getElementById('my-position')) {
+    document.getElementById('my-position').textContent = pos ? `#${pos + 0}` : '—';
+  }
+});
+
+socket.on('game_over', (lb) => {
+  qView.style.display = 'none';
+  rView.style.display = 'none';
+  goView.style.display = 'block';
+  clearInterval(timerIv);
+  const pos = lb.findIndex(p => p.nickname === myName) + 1;
+  document.getElementById('gameover-text').textContent =
+    pos === 1 ? `¡GANASTE, ${myName}! 🏆🥳` : `¡Gracias por jugar, ${myName}!`;
+  document.getElementById('my-position').textContent = pos ? `#${pos}` : '—';
+  document.getElementById('go-score').textContent =
+    pos ? lb[pos-1].score + ' pts' : '0 pts';
+  if (pos === 1) { SFX.victory(); confetti(); }
+  else SFX.correct();
+});
+
+function confetti() {
+  for (let i = 0; i < 30; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.textContent = ['🎉','🎵','🎶','⭐','✨'][i % 5];
+    c.style.left = Math.random()*100 + 'vw';
+    c.style.animationDuration = (2.5+Math.random()*2) + 's';
+    c.style.animationDelay = Math.random() + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 6000);
+  }
+}
+
+socket.on('game_reset', () => { alert('El anfitrión cerró la partida.'); location.reload(); });
+</script>
+{% endblock %}

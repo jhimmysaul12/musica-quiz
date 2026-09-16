@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block title %}Ser anfitrión — Música Quiz{% endblock %}
+
+{% block content %}
+<h1>🎤 Nuevo juego</h1>
+<p>Elige el quiz y se generará un PIN para tus jugadores.</p>
+
+<select id="quiz-select" style="max-width:100%;">
+  <option value="">-- Cargando quizzes... --</option>
+</select>
+<br>
+<button id="create-btn">Crear partida</button>
+<div id="error" style="color:#dc2626; font-weight:700; margin-top:10px;"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const quizSelect = document.getElementById('quiz-select');
+const createBtn = document.getElementById('create-btn');
+
+async function loadQuizList() {
+  const res = await fetch('/api/quizzes');
+  const quizzes = await res.json();
+  quizSelect.innerHTML = '<option value="">-- Elegir quiz --</option>';
+  quizzes.forEach(n => {
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    quizSelect.appendChild(o);
+  });
+}
+
+createBtn.addEventListener('click', () => {
+  if (!quizSelect.value) { alert('Selecciona un quiz'); return; }
+  createBtn.disabled = true;
+  socket.emit('create_game', { 'quiz-name': quizSelect.value });
+});
+
+socket.on('game_created', (data) => {
+  window.location.href = `/host/${data.pin}`;
+});
+
+socket.on('create_failed', (d) => {
+  document.getElementById('error').textContent = d.reason;
+  createBtn.disabled = false;
+});
+
+loadQuizList();
+</script>
+{% endblock %}

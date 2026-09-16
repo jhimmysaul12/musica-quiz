@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+{% block title %}Login admin{% endblock %}
+
+{% block content %}
+<h1>🔐 Admin</h1>
+<form method="POST" style="display:contents;">
+  <input type="password" name="password" placeholder="Contraseña">
+  <br>
+  <button type="submit">Entrar</button>
+</form>
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <p style="color:#dc2626;">{{ messages[0] }}</p>
+  {% endif %}
+{% endwith %}
+{% endblock %}

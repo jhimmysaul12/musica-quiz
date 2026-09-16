@@ -1,0 +1,231 @@
+{% extends "layout.html" %}
+{% block title %}Host sala {{ pin }} — Música Quiz{% endblock %}
+
+{% block content %}
+<!-- LOBBY -->
+<div id="lobby">
+  <h1>Sala {{ pin }}</h1>
+  <img src="/api/pin/{{ pin }}/qr" alt="QR para unirse" width="180" height="180">
+  <p>Los celulares entran en: <strong>http://{{ host_ip }}:5000/join?pin={{ pin }}</strong></p>
+  <h2>Aguardando jugadores...</h2>
+  <ul id="player-list" class="player-list"></ul>
+  <button id="start-btn" disabled>Iniciar (0 jugadores)</button>
+  <button id="force-end-btn" style="display:none; background:linear-gradient(135deg,#dc2626,#991b1b);">Finalizar quiz</button>
+</div>
+
+<!-- PREGUNTA -->
+<div id="question-view" style="display:none;">
+  <div class="chips">
+    <span class="chip chip-cat" id="q-category"></span>
+    <span class="chip" id="q-difficulty"></span>
+  </div>
+  <span class="timer-num" id="timer-num"></span>
+  <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar"></div></div>
+  <h3 id="question-text"></h3>
+  <img id="question-image" class="q-image" src="" style="display:none;">
+  <div id="options-container" class="grid-options"></div>
+  <p>Respuestas: <span id="answer-count">0</span>/<span id="total-players">0</span></p>
+  <button id="show-results-btn">Mostrar resultados</button>
+</div>
+
+<!-- RESULTADOS -->
+<div id="results-view" style="display:none;">
+  <h2 id="results-correct"></h2>
+  <p id="results-explanation" class="hint"></p>
+  <div id="results-distribution"></div>
+  <h3>Ranking</h3>
+  <ol id="ranking-list" class="player-list" style="text-align:left;"></ol>
+  <button id="next-question-btn">Siguiente pregunta</button>
+</div>
+
+<!-- GAME OVER -->
+<div id="game-over-view" style="display:none;">
+  <h1>🏆 Resultados finales</h1>
+  <div class="podium" id="podium"></div>
+  <ol id="final-list" class="player-list" style="text-align:left;"></ol>
+  <button onclick="window.location.href='/host'">Nueva partida</button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PIN = "{{ pin }}";
+const lobby = document.getElementById('lobby');
+const qView = document.getElementById('question-view');
+const rView = document.getElementById('results-view');
+const goView = document.getElementById('game-over-view');
+
+const startBtn = document.getElementById('start-btn');
+const playerListEl = document.getElementById('player-list');
+const timerNum = document.getElementById('timer-num');
+const timerBar = document.getElementById('timer-bar');
+let timerIv = null;
+
+socket.emit('host_join', { pin: PIN });
+
+/* ---------- utilidades visuales ---------- */
+function renderPlayers(players) {
+  const list = document.getElementById('player-list');
+  if (!list) return;
+  list.innerHTML = '';
+  players.forEach(p => {
+    const li = document.createElement('li');
+    li.textContent = typeof p === 'string' ? p : p.nickname;
+    list.appendChild(li);
+  });
+  if (startBtn) {
+    startBtn.textContent = `Iniciar (${players.length} jugadores)`;
+    startBtn.disabled = players.length === 0;
+  }
+}
+
+function showQuestion(data) {
+  lobby.style.display = 'none';
+  rView.style.display = 'none';
+  goView.style.display = 'none';
+  qView.style.display = 'block';
+  SFX.newQuestion();
+
+  document.getElementById('q-category').textContent = data.category;
+  const diffEl = document.getElementById('q-difficulty');
+  diffEl.textContent = data.difficulty;
+  diffEl.className = 'chip chip-' + (data.difficulty === 'fácil' ? 'easy' : data.difficulty === 'difícil' ? 'hard' : 'med');
+
+  document.getElementById('question-text').textContent =
+    `${data.question_index + 1}/${data.total_questions} — ${data.text}`;
+  const img = document.getElementById('question-image');
+  if (data.image) { img.src = data.image; img.style.display = 'block'; }
+  else img.style.display = 'none';
+
+  // Audio de la pregunta (comodín de "¿qué canción es?")
+  const oldAudio = document.getElementById('host-question-audio');
+  if (oldAudio) oldAudio.remove();
+  if (data.audio) {
+    const a = document.createElement('audio');
+    a.id = 'host-question-audio';
+    a.controls = true;
+    a.autoplay = false;
+    a.src = data.audio;
+    a.style.cssText = 'width:100%; max-width:420px; margin:10px 0;';
+    document.getElementById('question-image').insertAdjacentElement('beforebegin', a);
+  }
+
+  const opts = document.getElementById('options-container');
+  opts.innerHTML = '';
+  const letters = ['A','B','C','D'];
+  data.options.forEach((opt, i) => {
+    const d = document.createElement('div');
+    d.className = 'option-btn';
+    d.textContent = `${letters[i]||'?'}: ${opt}`;
+    opts.appendChild(d);
+  });
+
+  // Animated timer
+  let left = data.time;
+  timerNum.textContent = left;
+  timerBar.style.transition = 'none';
+  timerBar.style.width = '100%';
+  requestAnimationFrame(() => { timerBar.style.transition = 'width 1s linear'; });
+  if (timerIv) clearInterval(timerIv);
+  timerIv = setInterval(() => {
+    left--;
+    if (left >= 0) {
+      timerNum.textContent = left;
+      timerBar.style.width = (left / data.time * 100) + '%';
+      if (left <= 5 && left > 0) SFX.tick();
+    } else clearInterval(timerIv);
+  }, 1000);
+}
+
+function showRanking(listEl, players) {
+  listEl.innerHTML = '';
+  players.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.textContent = `${i+1}. ${p.nickname}: ${p.score} pts`;
+    listEl.appendChild(li);
+  });
+}
+
+function confetti() {
+  for (let i = 0; i < 40; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.textContent = ['🎉','🎵','🎶','⭐','✨'][i % 5];
+    c.style.left = Math.random()*100 + 'vw';
+    c.style.animationDuration = (2.5+Math.random()*2) + 's';
+    c.style.animationDelay = Math.random() + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 6000);
+  }
+}
+
+/* ---------- eventos ---------- */
+socket.on('update_player_list', renderPlayers);
+socket.on('show_question', showQuestion);
+
+socket.on('update_answer_count', (d) => {
+  document.getElementById('answer-count').textContent = d.answered;
+  document.getElementById('total-players').textContent = d.total;
+});
+
+socket.on('time_up', () => { if (timerIv) clearInterval(timerIv); });
+
+socket.on('show_results', (data) => {
+  qView.style.display = 'none';
+  rView.style.display = 'block';
+  document.getElementById('results-correct').textContent =
+    `✅ ${data.correct_option_text}`;
+  document.getElementById('results-explanation').textContent = data.explanation;
+  // distribución como barras
+  const dist = document.getElementById('results-distribution');
+  dist.innerHTML = '';
+  const letters = ['A','B','C','D'];
+  const colors = ['#e11d48','#2563eb','#eab308','#16a34a'];
+  const max = Math.max(1, ...data.distribution);
+  data.distribution.forEach((n, i) => {
+    const w = document.createElement('div');
+    w.style.cssText = `display:flex;align-items:center;gap:8px;margin:4px auto;max-width:400px;`;
+    w.innerHTML = `<b style="width:16px;">${letters[i]}</b>
+      <div style="flex:1;background:#eee;border-radius:6px;">
+        <div style="width:${n/max*100}%;background:${colors[i]};height:16px;border-radius:6px;transition:width .5s;"></div>
+      </div><span>${n}</span>`;
+    dist.appendChild(w);
+  });
+  showRanking(document.getElementById('ranking-list'), data.leaderboard);
+});
+
+socket.on('game_over', (lb) => {
+  lobby.style.display = 'none';
+  qView.style.display = 'none';
+  rView.style.display = 'none';
+  goView.style.display = 'block';
+  SFX.victory(); confetti();
+  const pod = document.getElementById('podium');
+  pod.innerHTML = '';
+  ['podium-2','podium-1','podium-3'].forEach((cls, i) => {
+    const p = lb[i === 1 ? 0 : i === 0 ? 1 : 2];
+    if (!p) return;
+    const d = document.createElement('div');
+    d.className = `podium-slot ${cls}`;
+    const medal = ['🥇','🥈','🥉'][i === 1 ? 0 : i === 0 ? 1 : 2];
+    d.innerHTML = `<div class="podium-bar">${medal}</div>
+      <div class="podium-name">${p.nickname}</div>
+      <div class="podium-pts">${p.score} pts</div>`;
+    pod.appendChild(d);
+  });
+  showRanking(document.getElementById('final-list'), lb);
+});
+
+socket.on('game_reset', () => { alert('La partida se cerró.'); location.reload(); });
+
+/* ---------- botones ---------- */
+startBtn.addEventListener('click', () => socket.emit('start_game'));
+document.getElementById('show-results-btn').addEventListener('click',
+  () => socket.emit('show_results'));
+document.getElementById('next-question-btn').addEventListener('click',
+  () => socket.emit('next_question'));
+document.getElementById('force-end-btn').addEventListener('click',
+  () => { if (confirm('¿Terminar el quiz ahora?')) socket.emit('force_end_quiz'); });
+document.getElementById('force-end-btn').style.display = 'block';
+</script>
+{% endblock %}

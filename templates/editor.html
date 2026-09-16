@@ -1,0 +1,243 @@
+{% extends "layout.html" %}
+{% block title %}Panel de preguntas — Música Quiz{% endblock %}
+
+{% block content %}
+<div class="quiz-editor">
+  <h1>✏️ Panel de preguntas</h1>
+
+  <div class="toolbar">
+    <select id="quiz-select" style="max-width:280px;">
+      <option value="">-- Nuevo quiz --</option>
+    </select>
+    <button id="new-quiz-btn">Nuevo</button>
+    <button id="delete-quiz-btn" style="background:linear-gradient(135deg,#dc2626,#991b1b);">Eliminar quiz</button>
+    <label class="btn" style="display:inline-block; cursor:pointer; padding:10px 18px;">
+      📥 Importar JSON/CSV
+      <input type="file" id="import-file" accept=".json,.csv,.tsv" style="display:none;">
+    </label>
+  </div>
+
+  <input type="text" id="quiz-title" placeholder="Título del quiz (ej: Música cristiana vol. 1)">
+
+  <div id="questions-container"></div>
+  <div class="toolbar">
+    <button id="add-question-btn">+ Agregar pregunta</button>
+    <button id="save-quiz-btn" style="background:linear-gradient(135deg,#16a34a,#15803d);">💾 Guardar quiz</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentQuizName = "";
+let quizData = { title: "", questions: [] };
+
+const quizSelect = document.getElementById('quiz-select');
+const quizTitleInput = document.getElementById('quiz-title');
+const questionsContainer = document.getElementById('questions-container');
+
+const CATEGORIES = [
+  'Música cristiana', 'Cantantes y grupos', 'Instrumentos',
+  'Biblia y música', 'Teoría musical', 'Alabanza y adoración',
+  'Cultura general musical', 'General'
+];
+const DIFFICULTIES = ['fácil', 'media', 'difícil'];
+
+function esc(s) {
+  return (s || '').replace(/[&<>"]/g, m =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+}
+
+async function loadQuizList() {
+  const res = await fetch('/api/quizzes');
+  const quizzes = await res.json();
+  quizSelect.innerHTML = '<option value="">-- Nuevo quiz --</option>';
+  quizzes.forEach(n => {
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    quizSelect.appendChild(o);
+  });
+}
+
+async function loadQuiz(name) {
+  const res = await fetch(`/api/quiz/${encodeURIComponent(name)}`);
+  if (!res.ok) return alert('No se pudo cargar');
+  quizData = await res.json();
+  currentQuizName = name;
+  quizTitleInput.value = quizData.title || name;
+  render();
+}
+
+function render() {
+  questionsContainer.innerHTML = '';
+  quizData.questions.forEach((q, i) => {
+    const d = document.createElement('div');
+    d.className = 'question-card';
+    d.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong>Pregunta ${i+1}</strong>
+        <button data-i="${i}" class="rm-q" style="background:linear-gradient(135deg,#dc2626,#991b1b); padding:6px 12px; font-size:.8rem;">✕</button>
+      </div>
+      <label>Texto:</label><br>
+      <input type="text" data-i="${i}" class="q-text" value="${esc(q.text)}" style="max-width:100%; text-align:left;">
+      <br><br>
+      <div class="grid-options" style="gap:8px;">
+        ${q.options.map((o, j) => `
+          <input type="text" data-i="${i}" data-j="${j}" class="o-text" value="${esc(o)}"
+                 placeholder="Alternativa ${j+1}" style="max-width:100%; text-align:left;">
+        `).join('')}
+      </div>
+      <div style="margin-top:8px;">
+        <label>Correcta (0-${q.options.length-1}):</label>
+        <input type="number" data-i="${i}" class="q-correct" value="${q.correct_option}" min="0" max="${q.options.length-1}" style="width:70px; padding:5px;">
+        &nbsp;&nbsp;
+        <label>Segundos:</label>
+        <input type="number" data-i="${i}" class="q-time" value="${q.time || 20}" min="5" max="120" style="width:70px; padding:5px;">
+      </div>
+      <div style="margin-top:8px;">
+        <label>Categoría:</label>
+        <select data-i="${i}" class="q-cat" style="display:inline-block; width:auto; padding:5px;">
+          ${CATEGORIES.map(c => `<option ${q.category===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <label>Dificultad:</label>
+        <select data-i="${i}" class="q-diff" style="display:inline-block; width:auto; padding:5px;">
+          ${DIFFICULTIES.map(c => `<option ${q.difficulty===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-top:8px;">
+        <label>Explicación (opcional):</label><br>
+        <input type="text" data-i="${i}" class="q-expl" value="${esc(q.explanation || '')}" style="max-width:100%; text-align:left;">
+      </div>
+      <div style="margin-top:8px;">
+        <label>Imagen (opcional):</label>
+        <input type="file" data-i="${i}" class="q-img" accept="image/*" style="display:inline; margin-left:8px;">
+        ${q.image && q.image !== 'none' ? `<img src="/static/quiz-figures/${esc(q.image)}" class="q-image" style="max-height:80px;"> <small>${esc(q.image)}</small>` : '<small class="hint">ninguna</small>'}
+      </div>
+      <div style="margin-top:8px;">
+        <label>🎵 Audio (opcional — mp3, wav, m4a):</label>
+        <input type="file" data-i="${i}" class="q-audio" accept="audio/*" style="display:inline; margin-left:8px;">
+        ${q.audio && q.audio !== 'none' ? `<audio controls src="/static/quiz-audio/${esc(q.audio)}" style="height:32px; max-width:280px;"></audio> <small>${esc(q.audio)}</small>` : '<small class="hint">ninguno</small>'}
+      </div>
+    `;
+    questionsContainer.appendChild(d);
+  });
+}
+
+function bind() {
+  questionsContainer.addEventListener('input', e => {
+    const i = e.target.dataset.i, j = e.target.dataset.j;
+    if (i === undefined) return;
+    const q = quizData.questions[+i];
+    if (e.target.classList.contains('q-text')) q.text = e.target.value;
+    else if (e.target.classList.contains('o-text')) q.options[+j] = e.target.value;
+    else if (e.target.classList.contains('q-correct')) q.correct_option = +e.target.value;
+    else if (e.target.classList.contains('q-time')) q.time = +e.target.value;
+    else if (e.target.classList.contains('q-cat')) q.category = e.target.value;
+    else if (e.target.classList.contains('q-diff')) q.difficulty = e.target.value;
+    else if (e.target.classList.contains('q-expl')) q.explanation = e.target.value;
+  });
+  questionsContainer.addEventListener('change', async e => {
+    if (e.target.classList.contains('q-img')) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch('/api/upload_image', { method:'POST', body: fd });
+      const data = await res.json();
+      if (res.ok) { quizData.questions[+e.target.dataset.i].image = data.filename; render(); }
+      else alert(data.error);
+    }
+    if (e.target.classList.contains('q-audio')) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('audio', file);
+      const res = await fetch('/api/upload_audio', { method:'POST', body: fd });
+      const data = await res.json();
+      if (res.ok) { quizData.questions[+e.target.dataset.i].audio = data.filename; render(); }
+      else alert(data.error);
+    }
+  });
+  questionsContainer.addEventListener('click', e => {
+    if (e.target.classList.contains('rm-q')) {
+      quizData.questions.splice(+e.target.dataset.i, 1);
+      render();
+    }
+  });
+}
+
+document.getElementById('add-question-btn').addEventListener('click', () => {
+  quizData.questions.push({
+    text: '', options: ['', '', '', ''], correct_option: 0,
+    time: 20, category: 'Música cristiana', difficulty: 'media',
+    explanation: '', image: 'none', audio: 'none'
+  });
+  render();
+});
+
+document.getElementById('save-quiz-btn').addEventListener('click', async () => {
+  quizData.title = quizTitleInput.value.trim();
+  if (!quizData.title) return alert('Ponle un título al quiz');
+  let target = currentQuizName;
+  if (!target) {
+    target = quizData.title.replace(/[^a-zA-Z0-9_\- áéíóúñÁÉÍÓÚÑ]/g, '_').trim();
+  }
+  const res = await fetch(`/api/quiz/${encodeURIComponent(target)}`, {
+    method:'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(quizData)
+  });
+  if (res.ok) { alert('¡Guardado!'); currentQuizName = target; loadQuizList(); }
+  else alert('Error al guardar');
+});
+
+document.getElementById('new-quiz-btn').addEventListener('click', () => {
+  currentQuizName = "";
+  quizData = { title: "", questions: [] };
+  quizTitleInput.value = "";
+  quizSelect.value = "";
+  render();
+});
+
+document.getElementById('delete-quiz-btn').addEventListener('click', async () => {
+  if (!currentQuizName) return alert('Selecciona un quiz para eliminar');
+  if (!confirm(`¿Eliminar "${currentQuizName}"?`)) return;
+  await fetch(`/api/quiz/${encodeURIComponent(currentQuizName)}`, { method:'DELETE' });
+  currentQuizName = "";
+  quizData = { title: "", questions: [] };
+  quizTitleInput.value = "";
+  render();
+  loadQuizList();
+});
+
+document.getElementById('import-file').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  let target = currentQuizName;
+  if (!target) {
+    target = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  }
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/import_quiz/${encodeURIComponent(target)}`, { method:'POST', body: fd });
+  if (res.ok) {
+    const data = await res.json();
+    alert(data.message);
+    currentQuizName = target;
+    quizData = data.quiz;
+    quizTitleInput.value = quizData.title;
+    render();
+    loadQuizList();
+  } else alert('Error importando');
+});
+
+quizSelect.addEventListener('change', e => {
+  if (e.target.value) loadQuiz(e.target.value);
+  else document.getElementById('new-quiz-btn').click();
+});
+
+bind();
+loadQuizList();
+render();
+</script>
+{% endblock %}

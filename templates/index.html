@@ -1,0 +1,20 @@
+{% extends "layout.html" %}
+{% block title %}Música Quiz{% endblock %}
+
+{% block content %}
+<h1>🎵 Música Quiz</h1>
+<p>¿Cuánto sabemos de música?</p>
+
+<div style="display:flex; flex-direction:column; gap:14px; max-width:340px; margin:24px auto;">
+  <a href="/join" class="btn" style="text-decoration:none; display:block;">
+    📱 Entrar como jugador
+  </a>
+  <a href="/host" class="btn" style="text-decoration:none; display:block;">
+    🎤 Ser anfitrión
+  </a>
+  <a href="/editor" class="btn" style="text-decoration:none; display:block;">
+    ✏️ Panel de preguntas
+  </a>
+</div>
+<p class="hint">En la misma Wi-Fi, los celulares entran con el PIN de la sala.</p>
+{% endblock %}

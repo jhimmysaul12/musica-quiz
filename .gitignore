@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.private/
+scores/*.csv
+static/graphs/*.png
+server.log
+__pycache__/
+.venv/
+scores/
+*.log
+.private/

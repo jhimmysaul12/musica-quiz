@@ -1,0 +1,186 @@
+{
+  "questions": [
+    {
+      "category": "Teoría musical",
+      "correct_option": 2,
+      "difficulty": "media",
+      "explanation": "La última nota del arpegio sube al Do agudo (1047 Hz).",
+      "image": "none",
+      "options": [
+        "Do (grave)",
+        "Mi",
+        "Do (agudo octava superior)",
+        "Re"
+      ],
+      "text": "🎵 Escucha la melodía. ¿Qué nota es la ÚLTIMA que escuchas?",
+      "time": 20,
+      "audio": "test_melody.wav"
+    },
+    {
+      "category": "Instrumentos",
+      "correct_option": 2,
+      "difficulty": "fácil",
+      "explanation": "La guitarra clásica tiene 6 cuerdas.",
+      "image": "none",
+      "options": [
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "text": "¿Cuántos cuerdas tiene una guitarra clásica estándar?",
+      "time": 15
+    },
+    {
+      "category": "Biblia y música",
+      "correct_option": 0,
+      "difficulty": "fácil",
+      "explanation": "David calmaba a Saúl con el arpa (1 Samuel 16:23).",
+      "image": "none",
+      "options": [
+        "David",
+        "Samuel",
+        "Jonatán",
+        "Salomón"
+      ],
+      "text": "En la Biblia, ¿quién tocaba el arpa para calming del rey Saúl?",
+      "time": 20
+    },
+    {
+      "category": "Instrumentos",
+      "correct_option": 0,
+      "difficulty": "media",
+      "explanation": "El charango es originario de los Andes.",
+      "image": "none",
+      "options": [
+        "Charango",
+        "Bandolín",
+        "Flauta traversa",
+        "Órgano"
+      ],
+      "text": "¿Qué instrumento es típico de la música andina peruana?",
+      "time": 20
+    },
+    {
+      "category": "Alabanza y adoración",
+      "correct_option": 1,
+      "difficulty": "difícil",
+      "explanation": "'Aleluya' = 'Alaben a Yah' (nombre corto de Dios).",
+      "image": "none",
+      "options": [
+        "Canten juntos",
+        "Alaben a Yah",
+        "Gloria al Rey",
+        "Dios con nosotros"
+      ],
+      "text": "¿Qué significa 'Aleluya' en hebreo?",
+      "time": 20
+    },
+    {
+      "category": "Biblia y música",
+      "correct_option": 2,
+      "difficulty": "media",
+      "explanation": "El libro de Salmos tiene 150 salmos.",
+      "image": "none",
+      "options": [
+        "100",
+        "120",
+        "150",
+        "180"
+      ],
+      "text": "¿Cuántos salmos hay en el libro de Salmos?",
+      "time": 15
+    },
+    {
+      "category": "Teoría musical",
+      "correct_option": 2,
+      "difficulty": "fácil",
+      "explanation": "La escala diatónica tiene 7 notas (do, re, mi...).",
+      "image": "none",
+      "options": [
+        "5",
+        "6",
+        "7",
+        "8"
+      ],
+      "text": "En teoría musical, ¿cuántas notas tiene la escala diatónica?",
+      "time": 15
+    },
+    {
+      "category": "Música cristiana",
+      "correct_option": 1,
+      "difficulty": "difícil",
+      "explanation": "Cory Asbury compuso 'Reckless Love' (2018).",
+      "image": "none",
+      "options": [
+        "Hillsong United",
+        "Cory Asbury",
+        "Elevation Worship",
+        "Bethel Music"
+      ],
+      "text": "¿Quién es el autor de 'Reckless Love'?",
+      "time": 20
+    },
+    {
+      "category": "Alabanza y adoración",
+      "correct_option": 1,
+      "difficulty": "media",
+      "explanation": "Doxología = alabanza glorificada a Dios.",
+      "image": "none",
+      "options": [
+        "Canto fúnebre",
+        "Expresión de alabanza a Dios",
+        "Meditación",
+        "Sermón cantado"
+      ],
+      "text": "¿Qué significa 'doxología'?",
+      "time": 20
+    },
+    {
+      "category": "Cultura general musical",
+      "correct_option": 0,
+      "difficulty": "fácil",
+      "explanation": "Desafinar es salirse del tono correcto.",
+      "image": "none",
+      "options": [
+        "Desafinar",
+        "Armonizar",
+        "Falsete",
+        "Vibrato"
+      ],
+      "text": "¿Salirse del tono mientras cantamos se llama...?",
+      "time": 15
+    },
+    {
+      "category": "Cantantes y grupos",
+      "correct_option": 2,
+      "difficulty": "difícil",
+      "explanation": "Los irreverentes impulsaron la salsa cristiana.",
+      "image": "none",
+      "options": [
+        "Hillsong",
+        "Danny Berrio",
+        "Los irreverentes",
+        "Robin Williams"
+      ],
+      "text": "¿Qué grupo's puertoricanne fostereó la música 'salsa cristiana'?",
+      "time": 25
+    },
+    {
+      "category": "Teoría musical",
+      "correct_option": 2,
+      "difficulty": "media",
+      "explanation": "Un cuarteto = 4 músicos/instrumentos.",
+      "image": "none",
+      "options": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "text": "¿Cuántos instrumentos forman un cuarteto de percusión mínimo?",
+      "time": 20
+    }
+  ],
+  "title": "Música Cristiana Vol. 1"
+}
