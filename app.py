@@ -39,6 +39,8 @@ os.makedirs(SECRET_FOLDER, exist_ok=True)
 
 # ------------- Claves de sesión (auto-generadas si no existen) -------------
 secretpath = BASE_DIR / SECRET_FOLDER / ".secret"
+_DEFAULT_FLASK_PW_HASH = hashlib.sha256(b"servir123").hexdigest()
+_DEFAULT_ADMIN_PW_HASH = hashlib.sha256(b"admin123").hexdigest()
 
 
 def _hash_password(name: str) -> str:
@@ -48,9 +50,14 @@ def _hash_password(name: str) -> str:
 
 
 if not secretpath.exists():
+    # En la nube no hay terminal para getpass: usar contraseñas por defecto
+    # (defínalas con FLASK_PW / ADMIN_PW vía variables de entorno si desea otras)
+    import os as _os2
+    _f = _os2.environ.get("FLASK_PW", "servir123")
+    _a = _os2.environ.get("ADMIN_PW", "admin123")
     with open(secretpath, "w+") as f:
-        f.write(_hash_password("FLASK") + "\n")
-        f.write(_hash_password("ADMIN") + "\n")
+        f.write(hashlib.sha256(_f.encode()).hexdigest() + "\n")
+        f.write(hashlib.sha256(_a.encode()).hexdigest() + "\n")
 elif len(open(secretpath).readlines()) not in (1, 2):
     print("archivo .secret inválido"); exit(1)
 
