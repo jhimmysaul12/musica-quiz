@@ -32,23 +32,26 @@
 <div id="results-view" style="display:none;">
   <h2 id="results-correct"></h2>
   <p id="results-explanation" class="hint"></p>
-  <div id="results-distribution"></div>
+
+  <!-- 🏆 Podio público: SOLO TOP 3 -->
+  <h3>🏆 Podio</h3>
+  <div id="podium-public" class="podium"></div>
 
   <!-- 🏁 Carrera de avatares: cada avatar avanza según su puntaje -->
   <h3>🏁 Carrera de avatares</h3>
   <div id="race-track" class="race-track"></div>
 
-  <h3>Ranking</h3>
-  <ol id="ranking-list" class="player-list" style="text-align:left;"></ol>
   <button id="next-question-btn">Siguiente pregunta</button>
 </div>
 
 <!-- GAME OVER -->
 <div id="game-over-view" style="display:none;">
   <h1>🏆 Resultados finales</h1>
+  <h3>Podio final</h3>
+  <div class="podium podium-final" id="podium"></div>
   <h3>🏁 Carrera final</h3>
   <div id="go-race" class="race-track"></div>
-  <div class="podium" id="podium"></div>
+  <h3>📋 Ranking completo (consulta)</h3>
   <ol id="final-list" class="player-list" style="text-align:left;"></ol>
   <button onclick="window.location.href='/host'">Nueva partida</button>
   <button onclick="window.location.href='/editor'">✏️ Panel de preguntas</button>
@@ -199,6 +202,29 @@ function confetti() {
   }
 }
 
+/* ---- Podio público TOP-3 con animación ---- */
+const MEDALS = ['🥇','🥈','🥉'];
+function renderPodium(leaderboard, containerId) {
+  const pod = document.getElementById(containerId);
+  if (!pod) return;
+  pod.innerHTML = '';
+  const top = leaderboard.slice(0, 3);
+  // orden visual: 2º — 1º (centro, protagonista) — 3º
+  const layout = [1, 0, 2];
+  layout.forEach((idx, order) => {
+    const p = top[idx];
+    if (!p) return;
+    const d = document.createElement('div');
+    d.className = `podium-slot podium-${idx + 1} podium-anim`;
+    d.style.animationDelay = (order * 0.15) + 's';
+    d.innerHTML = `<div class="podium-medal">${MEDALS[idx]}</div>
+      <div class="podium-avatar">${p.avatar || '🦁'}</div>
+      <div class="podium-name">${p.nickname}</div>
+      <div class="podium-pts">${(p.score || 0).toLocaleString('es-PE')} pts</div>`;
+    pod.appendChild(d);
+  });
+}
+
 /* ---------- eventos ---------- */
 socket.on('update_player_list', renderPlayers);
 socket.on('show_question', showQuestion);
@@ -216,23 +242,8 @@ socket.on('show_results', (data) => {
   document.getElementById('results-correct').textContent =
     `✅ ${data.correct_option_text}`;
   document.getElementById('results-explanation').textContent = data.explanation;
-  // distribución como barras
-  const dist = document.getElementById('results-distribution');
-  dist.innerHTML = '';
-  const letters = ['A','B','C','D'];
-  const colors = ['#e11d48','#2563eb','#eab308','#16a34a'];
-  const max = Math.max(1, ...data.distribution);
-  data.distribution.forEach((n, i) => {
-    const w = document.createElement('div');
-    w.style.cssText = `display:flex;align-items:center;gap:8px;margin:4px auto;max-width:400px;`;
-    w.innerHTML = `<b style="width:16px;">${letters[i]}</b>
-      <div style="flex:1;background:#eee;border-radius:6px;">
-        <div style="width:${n/max*100}%;background:${colors[i]};height:16px;border-radius:6px;transition:width .5s;"></div>
-      </div><span>${n}</span>`;
-    dist.appendChild(w);
-  });
+  renderPodium(data.leaderboard, 'podium-public');
   renderRaceTrack(data.leaderboard);
-  showRanking(document.getElementById('ranking-list'), data.leaderboard);
 });
 
 socket.on('game_over', (lb) => {
@@ -241,19 +252,8 @@ socket.on('game_over', (lb) => {
   rView.style.display = 'none';
   goView.style.display = 'block';
   SFX.victory(); confetti();
-  const pod = document.getElementById('podium');
-  pod.innerHTML = '';
-  ['podium-2','podium-1','podium-3'].forEach((cls, i) => {
-    const p = lb[i === 1 ? 0 : i === 0 ? 1 : 2];
-    if (!p) return;
-    const d = document.createElement('div');
-    d.className = `podium-slot ${cls}`;
-    const medal = ['🥇','🥈','🥉'][i === 1 ? 0 : i === 0 ? 1 : 2];
-    d.innerHTML = `<div class="podium-bar">${medal}</div>
-      <div class="podium-name">${p.nickname}</div>
-      <div class="podium-pts">${p.score} pts</div>`;
-    pod.appendChild(d);
-  });
+  // podio final: mismo TOP-3 con más protagonismo
+  renderPodium(lb, 'podium');
   showRanking(document.getElementById('final-list'), lb);
   // carrera final en la pista del game-over
   renderRaceTrackGo(lb);

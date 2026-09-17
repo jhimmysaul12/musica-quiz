@@ -107,7 +107,7 @@ class GameState:
         self.tokens = {}        # session_token -> sid
 
     def leaderboard(self):
-        lb = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '✝️'),
+        lb = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '🦁'),
                'score': p['score'], 'streak': p['streak']}
               for p in self.players.values()]
         lb.sort(key=lambda x: x['score'], reverse=True)
@@ -115,7 +115,7 @@ class GameState:
 
     def players_list(self):
         """Lista de jugadores con avatar, ordenada por puntuación (en juego)."""
-        pl = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '✝️'),
+        pl = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '🦁'),
                'score': p['score'], 'streak': p.get('streak', 0)}
               for p in self.players.values()]
         pl.sort(key=lambda x: x['score'], reverse=True)
@@ -431,6 +431,12 @@ def _timer_thread(pin: str, q_time: int):
         socketio.emit('time_up', {}, to=pin)
 
 
+@app.route('/api/avatars')
+def api_avatars():
+    """Lista de animales bíblicos disponibles para elegir como avatar."""
+    return jsonify(BIBLE_ANIMALS)
+
+
 # ============================ Eventos SocketIO ============================
 @socketio.on('connect')
 def on_connect():
@@ -502,11 +508,22 @@ def on_host_join(data):
     emit('host_ready', {'pin': pin}, to=request.sid)
 
 
-# Avatares bíblicos (emoji) que los jugadores pueden escoger
-BIBLE_AVATARS = [
-    '✝️', '🕊️', '🌊', '🔥', '👑', '🐑', '🦁', '🌈',
-    '⛰️', '🕯️', '📜', '⭐', '🍇', '🗡️', '🐟', '🌴',
+# Avatares bíblicos: animales reconocibles de la Escritura
+BIBLE_ANIMALS = [
+    {'emoji': '🦁', 'nombre': 'León'},
+    {'emoji': '🐑', 'nombre': 'Oveja'},
+    {'emoji': '🕊️', 'nombre': 'Paloma'},
+    {'emoji': '🦅', 'nombre': 'Águila'},
+    {'emoji': '🐍', 'nombre': 'Serpiente'},
+    {'emoji': '🐟', 'nombre': 'Pez'},
+    {'emoji': '🐐', 'nombre': 'Cabra'},
+    {'emoji': '🫏', 'nombre': 'Asno'},
+    {'emoji': '🐫', 'nombre': 'Camello'},
+    {'emoji': '🐄', 'nombre': 'Buey'},
+    {'emoji': '🐎', 'nombre': 'Caballo'},
+    {'emoji': '🐝', 'nombre': 'Abeja'},
 ]
+BIBLE_AVATARS = [a['emoji'] for a in BIBLE_ANIMALS]
 
 
 @socketio.on('player_join')
@@ -517,16 +534,19 @@ def on_player_join(data):
     avatar = (data or {}).get('avatar', '')[:8]
     if not nickname:
         return emit('join_failed', {'reason': 'Escribe tu nombre'})
-    if avatar not in BIBLE_AVATARS:
-        avatar = BIBLE_AVATARS[0]
     game = GAMES.get(pin)
     if game is None:
         return emit('join_failed', {'reason': 'PIN no válido'})
     if game.state != STATE_LOBBY:
         return emit('join_failed', {'reason': 'La partida ya empezó'})
+    if avatar not in BIBLE_AVATARS:
+        # asignación automática: primer animal libre para este jugador
+        used = {p.get('avatar') for p in game.players.values()}
+        avatar = next((a for a in BIBLE_AVATARS if a not in used), BIBLE_AVATARS[0])
     # mismo avatar no se repite dentro de la sala
     if any(p.get('avatar') == avatar for p in game.players.values()):
-        return emit('join_failed', {'reason': 'Ese avatar ya fue elegido — elige otro'})
+        used = {p.get('avatar') for p in game.players.values()}
+        avatar = next((a for a in BIBLE_AVATARS if a not in used), avatar)
     existing = [p['nickname'].lower() for p in game.players.values()]
     if nickname.lower() in existing:
         return emit('join_failed', {'reason': 'Nombre ya en uso'})
@@ -543,7 +563,8 @@ def on_player_join(data):
     token = secrets.token_hex(16)
     game.tokens[token] = request.sid
     emit('join_success', {'nickname': nickname, 'token': token,
-                          'pin': pin}, to=request.sid)
+                          'pin': pin,
+                          'avatar': avatar}, to=request.sid)
     socketio.emit('update_player_list', game.players_list(), to=pin)
     print(f"Jugador '{nickname}' ({avatar}) entró a {pin}")
 
@@ -669,7 +690,7 @@ def reveal_results(pin: str, auto=False):
         'explanation': q.get('explanation', ''),
         'distribution': distribution,
         'scores': {sid: p['score'] for sid, p in game.players.items()},
-        'players': [{'nickname': p['nickname'], 'avatar': p.get('avatar', '✝️'),
+        'players': [{'nickname': p['nickname'], 'avatar': p.get('avatar', '🦁'),
                      'score': p['score'], 'streak': p.get('streak', 0),
                      'last_pts': p.get('last_pts', 0),
                      'last_correct': p.get('last_correct', False)}

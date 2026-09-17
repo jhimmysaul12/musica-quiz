@@ -168,13 +168,51 @@ input:focus, textarea:focus { border-color: #a855f7; box-shadow: 0 0 10px rgba(1
 
 /* ---- Podio ---- */
 .podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin-top: 24px; }
-.podium-slot { width: 110px; }
-.podium-bar { border-radius: 12px 12px 0 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 10px; font-size: 2rem; color: #fff; font-weight: 800; }
-.podium-1 .podium-bar { height: 150px; background: linear-gradient(180deg,#fbbf24,#d97706); }
-.podium-2 .podium-bar { height: 110px; background: linear-gradient(180deg,#cbd5e1,#94a3b8); }
-.podium-3 .podium-bar { height: 85px; background: linear-gradient(180deg,#fdba74,#c2703d); }
-.podium-name { font-weight: 700; margin-top: 6px; word-break: break-word; }
-.podium-pts { font-size: .85rem; color: #6b7280; }
+.podium-slot {
+  width: 130px;
+  background: linear-gradient(180deg, #faf5ff, #fff);
+  border: 1px solid #ddd6fe;
+  border-radius: 14px;
+  padding-bottom: 10px;
+}
+.podium-medal { font-size: 1.9rem; padding-top: 10px; }
+.podium-avatar { font-size: 3rem; line-height: 1.1; }
+.podium-1 { transform: scale(1.12); transform-origin: bottom; z-index: 2;
+            box-shadow: 0 10px 30px rgba(124,58,237,.25); border-color: #fbbf24; }
+.podium-1 .podium-avatar { font-size: 4rem; }
+.podium-1 .podium-medal { font-size: 2.4rem; }
+.podium-name { font-weight: 800; margin-top: 6px; word-break: break-word; color: #4c1d95; }
+.podium-pts { font-size: .9rem; color: #7c3aed; font-weight: 700; }
+/* animación de entrada: sube suave, 1º con delay para protagonismo */
+.podium-anim { animation: podiumRise .6s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes podiumRise { from { transform: translateY(28px) scale(.85); opacity: 0; }
+                        to { transform: translateY(0) scale(1); opacity: 1; } }
+.podium-1.podium-anim { animation: podiumRiseFirst .7s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes podiumRiseFirst { from { transform: translateY(40px) scale(.9); opacity: 0; }
+                             to { transform: translateY(0) scale(1.12); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .podium-anim, .podium-1.podium-anim { animation: none; }
+}
+
+/* ---- Posiciones cercanas (vista individual del jugador) ---- */
+.near-positions { max-width: 420px; margin: 10px auto; }
+.near-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid #eee;
+  border-radius: 999px; padding: 9px 14px; margin: 5px 0;
+  text-align: left; font-weight: 700; color: #4c1d95;
+}
+.near-row.me-row { background: linear-gradient(135deg, #7c3aed22, #c026d322); border-color: #a855f7; }
+.me-row .p-name { color: #6d28d9; }
+.p-pos { flex: 0 0 38px; font-weight: 800; color: #7c3aed; }
+.mini-rank li.me-row { background: linear-gradient(135deg, #7c3aed22, #c026d322); border-color: #a855f7; }
+
+/* avatar selector con nombre */
+.avatar-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.avatar-emoji { font-size: 1.5rem; line-height: 1.1; }
+.avatar-name { font-size: .6rem; font-weight: 700; color: #4c1d95; text-transform: none; letter-spacing: 0; }
+.avatar-selected .avatar-name { color: #fff; }
+@media (max-width: 480px) { .avatar-name { font-size: .55rem; } }
 
 /* ---- Chips categoría / dificultad ---- */
 .chips { display: flex; gap: 8px; justify-content: center; margin: 8px 0 12px; flex-wrap: wrap; }

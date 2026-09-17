@@ -41,8 +41,8 @@
   <img id="question-image" class="q-image" src="" style="display:none;">
   <div id="options-grid" class="grid-options"></div>
   <div class="live-mini">
-    <p>Su puntuación: <strong id="live-score">0</strong>
-       · Posición: <strong id="live-pos">—</strong></p>
+    <p>Tu posición: <strong id="live-pos">—</strong>
+       · <strong id="live-score">0</strong> puntos</p>
     <ul id="live-rank" class="mini-rank"></ul>
   </div>
 </div>
@@ -51,15 +51,16 @@
 <div id="result-view" style="display:none;">
   <h2 id="result-text"></h2>
   <p id="result-pts" class="hint"></p>
+  <p>Tu posición: <strong id="my-pos-now">#—</strong></p>
   <p>Tu puntuación: <strong id="score-display">0</strong></p>
   <p id="streak-display" class="hint"></p>
+
+  <!-- Posiciones cercanas (individuales) -->
+  <div id="near-positions" class="near-positions"></div>
 
   <!-- 🏁 Carrera de avatares: avanza según puntaje -->
   <h3>🏁 Carrera</h3>
   <div id="race-track" class="race-track"></div>
-
-  <h3>🏆 Ranking — ¿quién va primero?</h3>
-  <ol id="result-rank" class="player-list"></ol>
 </div>
 
 <!-- GAME OVER -->
@@ -67,8 +68,11 @@
   <h2 id="gameover-text"></h2>
   <p>Tu posición: <strong id="my-position"></strong></p>
   <p>Tus puntos: <strong id="go-score"></strong></p>
+  <h3>🏆 Podio final</h3>
+  <div id="podium-individual" class="podium"></div>
   <h3>🏁 Carrera final</h3>
   <div id="go-race" class="race-track"></div>
+  <h3>🏆 Ranking final</h3>
   <ol id="go-rank" class="player-list"></ol>
 </div>
 {% endblock %}
@@ -91,21 +95,25 @@ let mySid = null;
 let myName = null;
 let myAvatar = '✝️';
 
-/* ---- Avatares bíblicos ---- */
-const AVATARS = ['✝️','🕊️','🌊','🔥','👑','🐑','🦁','🌈',
-                 '⛰️','🕯️','📜','⭐','🍇','🗡️','🐟','🌴'];
+/* ---- Avatares: animales bíblicos ---- */
+const ANIMALS = [
+  {e:'🦁', n:'León'}, {e:'🐑', n:'Oveja'}, {e:'🕊️', n:'Paloma'},
+  {e:'🦅', n:'Águila'}, {e:'🐍', n:'Serpiente'}, {e:'🐟', n:'Pez'},
+  {e:'🐐', n:'Cabra'}, {e:'🫏', n:'Asno'}, {e:'🐫', n:'Camello'},
+  {e:'🐄', n:'Buey'}, {e:'🐎', n:'Caballo'}, {e:'🐝', n:'Abeja'},
+];
 let chosenAvatar = localStorage.getItem('mqAvatar') || '';
 
 const avatarGrid = document.getElementById('avatar-grid');
-AVATARS.forEach(a => {
+ANIMALS.forEach(a => {
   const b = document.createElement('button');
   b.type = 'button';
-  b.className = 'avatar-btn' + (a === chosenAvatar ? ' avatar-selected' : '');
-  b.textContent = a;
-  b.setAttribute('aria-label', 'Avatar ' + a);
+  b.className = 'avatar-btn' + (a.e === chosenAvatar ? ' avatar-selected' : '');
+  b.innerHTML = `<span class="avatar-emoji">${a.e}</span><span class="avatar-name">${a.n}</span>`;
+  b.setAttribute('aria-label', 'Avatar ' + a.n);
   b.addEventListener('click', () => {
-    chosenAvatar = a;
-    localStorage.setItem('mqAvatar', a);
+    chosenAvatar = a.e;
+    localStorage.setItem('mqAvatar', a.e);
     avatarGrid.querySelectorAll('.avatar-btn').forEach(x => x.classList.remove('avatar-selected'));
     b.classList.add('avatar-selected');
   });
@@ -138,6 +146,7 @@ socket.on('connect', () => { mySid = socket.id; });
 
 socket.on('join_success', (d) => {
   myName = d.nickname;
+  if (d.avatar) { myAvatar = d.avatar; localStorage.setItem('mqAvatar', d.avatar); }
   joinView.style.display = 'none';
   waitView.style.display = 'block';
   document.getElementById('nickname-display').textContent = d.nickname;
@@ -151,7 +160,7 @@ socket.on('join_failed', (d) => {
 });
 
 /* lista de jugadores ordenada con avatar y puntos */
-function renderPlayerList(players, listId, ordered) {
+function renderPlayerList(players, listId, ordered, numbered) {
   const ul = document.getElementById(listId);
   if (!ul) return;
   let arr = players.slice();
@@ -160,8 +169,8 @@ function renderPlayerList(players, listId, ordered) {
   arr.forEach((p, i) => {
     const li = document.createElement('li');
     li.className = 'player-row';
-    const rank = ordered ? `${i + 1}.` : '';
-    li.innerHTML = `<span class="p-avatar">${p.avatar || '✝️'}</span>
+    const rank = (ordered || numbered) ? `${i + 1}.` : '';
+    li.innerHTML = `<span class="p-avatar">${p.avatar || '🦁'}</span>
       <span class="p-name">${rank} ${p.nickname}</span>
       <span class="p-score">${p.score || 0} pts</span>`;
     ul.appendChild(li);
@@ -253,22 +262,72 @@ socket.on('answer_rejected', (d) => {
   grid.querySelectorAll('button').forEach(b => b.disabled = false);
 });
 
-/* mini ranking en vivo mientras se responde */
+/* mini ranking individual: tu posición + vecinos (#anterior, tú, #siguiente) */
 function updateLiveRank(players) {
-  const my = players.find(p => p.nickname === myName);
-  if (my) document.getElementById('live-score').textContent = my.score || 0;
   const sorted = players.slice().sort((a, b) => (b.score||0) - (a.score||0));
-  const pos = my ? sorted.findIndex(p => p.nickname === myName) + 1 : null;
+  const myIdx = sorted.findIndex(p => p.nickname === myName);
+  const pos = myIdx >= 0 ? myIdx + 1 : null;
   document.getElementById('live-pos').textContent = pos ? `#${pos}` : '—';
+  const my = myIdx >= 0 ? sorted[myIdx] : null;
+  if (my) document.getElementById('live-score').textContent = my.score || 0;
   const ul = document.getElementById('live-rank');
   if (!ul) return;
   ul.innerHTML = '';
-  sorted.forEach((p, i) => {
+  if (myIdx < 0) return;
+  const near = [sorted[myIdx - 1], sorted[myIdx], sorted[myIdx + 1]]
+    .filter(Boolean);
+  near.forEach((p) => {
+    const i = sorted.indexOf(p);
     const li = document.createElement('li');
-    li.innerHTML = `<span class="p-avatar">${p.avatar || '✝️'}</span>
-      <span class="p-name">${i + 1}. ${p.nickname}</span>
+    if (p.nickname === myName) li.classList.add('me-row');
+    li.innerHTML = `<span class="p-pos">#${i + 1}</span>
+      <span class="p-avatar">${p.avatar || '🦁'}</span>
+      <span class="p-name">${p.nickname === myName ? 'Tú — ' + p.nickname : p.nickname}</span>
       <span class="p-score">${p.score || 0} pts</span>`;
     ul.appendChild(li);
+  });
+}
+
+/* ---- Podio TOP-3 estilo concurso (solo para vistas finales) ---- */
+const MEDALS = ['🥇','🥈','🥉'];
+function renderIndividualPodium(lb, containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const top = lb.slice(0, 3);
+  el.innerHTML = '';
+  // orden visual: 2º izquierda, 1º centro (protagonista), 3º derecha
+  const layout = [1, 0, 2];
+  layout.forEach((idx) => {
+    const p = top[idx];
+    if (!p) return;
+    const slot = document.createElement('div');
+    slot.className = 'podium-slot podium-' + (idx + 1) + ' podium-anim';
+    slot.innerHTML = `<div class="podium-medal">${MEDALS[idx]}</div>
+      <div class="podium-avatar">${p.avatar || '🦁'}</div>
+      <div class="podium-name">${p.nickname}</div>
+      <div class="podium-pts">${(p.score || 0).toLocaleString('es-PE')} pts</div>`;
+    el.appendChild(slot);
+  });
+}
+
+/* posiciones cercanas al jugador (individual, no público) */
+function renderNearPositions(lb) {
+  const el = document.getElementById('near-positions');
+  if (!el) return;
+  const sorted = lb.slice();
+  const myIdx = sorted.findIndex(p => p.nickname === myName);
+  if (myIdx < 0) { el.innerHTML = ''; return; }
+  el.innerHTML = '';
+  [myIdx - 1, myIdx, myIdx + 1].forEach((i) => {
+    const p = sorted[i];
+    if (!p) return;
+    const row = document.createElement('div');
+    row.className = 'near-row' + (i === myIdx ? ' me-row' : '');
+    row.innerHTML = `<span class="p-pos">#${i + 1}</span>
+      <span class="p-avatar">${p.avatar || '🦁'}</span>
+      <span class="p-name">${i === myIdx ? 'Tú — ' + p.nickname : p.nickname}</span>
+      <span class="p-score">${(p.score || 0).toLocaleString('es-PE')} pts</span>`;
+    el.appendChild(row);
   });
 }
 
@@ -284,7 +343,7 @@ function renderRaceTrack(leaderboard, trackElId) {
     const pct = Math.min(100, (p.score / maxScore) * 92);
     lane.innerHTML = `
       <div class="race-lane-inner">
-        <div class="race-runner">${p.avatar || '✝️'}</div>
+        <div class="race-runner">${p.avatar || '🦁'}</div>
         <div class="race-flag">🏁</div>
       </div>
       <span class="race-lane-label">${p.nickname} · ${p.score} pts</span>`;
@@ -298,19 +357,20 @@ socket.on('show_results', (data) => {
   rView.style.display = 'block';
   clearInterval(timerIv);
   const myScore = data.scores[mySid] || 0;
-  document.getElementById('score-display').textContent = myScore;
-  // el servidor ahora manda streak/last_pts/last_correct
+  document.getElementById('score-display').textContent = myScore.toLocaleString('es-PE');
+  // el servidor envía streak/last_pts/last_correct + players con posiciones
   const p2 = data.players.find(x => x.nickname === myName);
   const lb = data.leaderboard;
   const pos = lb.findIndex(x => x.nickname === myName) + 1;
+  document.getElementById('my-pos-now').textContent = pos ? `#${pos}` : '—';
   if (p2) {
     document.getElementById('result-text').textContent = p2.last_correct ? '¡Correcto! 🎉' : 'Incorrecto 😢';
     document.getElementById('result-pts').textContent = p2.last_pts ? `+${p2.last_pts} pts` : '';
     document.getElementById('streak-display').textContent = p2.streak > 1 ? `Racha x${p2.streak} 🔥` : '';
     if (p2.last_correct) SFX.correct(); else SFX.wrong();
   }
-  // ranking completo con avatares y quién va primero
-  renderPlayerList(lb, 'result-rank', false);
+  // posiciones cercanas (individuales) — nada de ranking completo en pantalla
+  renderNearPositions(lb);
   // pista de carrera visible para todos
   renderRaceTrack(lb, 'race-track');
   if (document.getElementById('my-position')) {
@@ -328,10 +388,12 @@ socket.on('game_over', (lb) => {
     pos === 1 ? `¡GANASTE, ${myName}! 🏆🥳` : `¡Gracias por jugar, ${myName}!`;
   document.getElementById('my-position').textContent = pos ? `#${pos}` : '—';
   document.getElementById('go-score').textContent =
-    pos ? lb[pos-1].score + ' pts' : '0 pts';
+    pos ? lb[pos-1].score.toLocaleString('es-PE') + ' pts' : '0 pts';
   if (pos === 1) { SFX.victory(); confetti(); }
   else SFX.correct();
-  renderPlayerList(lb, 'go-rank', false);
+  // podio final destacado + ranking completo solo al final (permitido)
+  renderIndividualPodium(lb, 'podium-individual');
+  renderPlayerList(lb, 'go-rank', false, true);
   renderRaceTrack(lb, 'go-race');
 });
 
