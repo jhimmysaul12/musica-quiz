@@ -57,10 +57,6 @@
 
   <!-- Posiciones cercanas (individuales) -->
   <div id="near-positions" class="near-positions"></div>
-
-  <!-- 🏁 Carrera de avatares: avanza según puntaje -->
-  <h3>🏁 Carrera</h3>
-  <div id="race-track" class="race-track"></div>
 </div>
 
 <!-- GAME OVER -->
@@ -70,8 +66,6 @@
   <p>Tus puntos: <strong id="go-score"></strong></p>
   <h3>🏆 Podio final</h3>
   <div id="podium-individual" class="podium"></div>
-  <h3>🏁 Carrera final</h3>
-  <div id="go-race" class="race-track"></div>
   <h3>🏆 Ranking final</h3>
   <ol id="go-rank" class="player-list"></ol>
 </div>
@@ -331,27 +325,6 @@ function renderNearPositions(lb) {
   });
 }
 
-/* 🏁 Carrera de avatares (idéntica a la del host) */
-function renderRaceTrack(leaderboard, trackElId) {
-  const track = document.getElementById(trackElId);
-  if (!track) return;
-  const maxScore = Math.max(1, ...leaderboard.map(p => p.score));
-  track.innerHTML = '';
-  leaderboard.forEach((p) => {
-    const lane = document.createElement('div');
-    lane.className = 'race-lane';
-    const pct = Math.min(100, (p.score / maxScore) * 92);
-    lane.innerHTML = `
-      <div class="race-lane-inner">
-        <div class="race-runner">${p.avatar || '🦁'}</div>
-        <div class="race-flag">🏁</div>
-      </div>
-      <span class="race-lane-label">${p.nickname} · ${p.score} pts</span>`;
-    lane.querySelector('.race-runner').style.left = pct + '%';
-    track.appendChild(lane);
-  });
-}
-
 socket.on('show_results', (data) => {
   qView.style.display = 'none';
   rView.style.display = 'block';
@@ -371,8 +344,6 @@ socket.on('show_results', (data) => {
   }
   // posiciones cercanas (individuales) — nada de ranking completo en pantalla
   renderNearPositions(lb);
-  // pista de carrera visible para todos
-  renderRaceTrack(lb, 'race-track');
   if (document.getElementById('my-position')) {
     document.getElementById('my-position').textContent = pos ? `#${pos}` : '—';
   }
@@ -394,7 +365,6 @@ socket.on('game_over', (lb) => {
   // podio final destacado + ranking completo solo al final (permitido)
   renderIndividualPodium(lb, 'podium-individual');
   renderPlayerList(lb, 'go-rank', false, true);
-  renderRaceTrack(lb, 'go-race');
 });
 
 function confetti() {

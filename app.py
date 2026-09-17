@@ -228,9 +228,13 @@ def admin_view():
 
 @app.route('/api/pin/<pin>/qr')
 def api_pin_qr(pin):
-    """QR que apunta a http://IP:5000/join?pin=PIN"""
-    local_ip = get_local_ip()
-    join_url = f"http://{local_ip}:5000/join?pin={pin}"
+    """QR que apunta a la URL pública de /join (o IP local en desarrollo)."""
+    # en la nube: usar el Host del request (ej. musica-quiz-3.onrender.com);
+    # en red local (puerto 5000): usar la IP LAN como antes
+    if request.host.endswith('onrender.com'):
+        join_url = f"https://{request.host}/join?pin={pin}"
+    else:
+        join_url = f"http://{get_local_ip()}:5000/join?pin={pin}"
     img = qrcode.make(join_url)
     import io
     buf = io.BytesIO()
