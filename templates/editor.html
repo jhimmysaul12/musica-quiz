@@ -12,10 +12,29 @@
     <button id="new-quiz-btn">Nuevo</button>
     <button id="delete-quiz-btn" style="background:linear-gradient(135deg,#dc2626,#991b1b);">Eliminar quiz</button>
     <label class="btn" style="display:inline-block; cursor:pointer; padding:10px 18px;">
-      📥 Importar JSON/CSV
-      <input type="file" id="import-file" accept=".json,.csv,.tsv" style="display:none;">
-    </label>
-  </div>
+          📥 Importar JSON/CSV
+          <input type="file" id="import-file" accept=".json,.csv,.tsv" style="display:none;">
+        </label>
+        <button id="new-quiz-btn" style="display:none;">Nuevo</button>
+      </div>
+
+      <!-- 🎶 Música ambiental (espera / victoria) -->
+      <div class="question-card" style="background:#fdf4ff;">
+        <h3 style="margin-bottom:8px;">🎶 Música ambiental</h3>
+        <p class="hint" style="margin-bottom:10px;">Se escucha en los celulares: la de <b>espera</b> en el lobby (en bucle), la de <b>victoria</b> al terminar la partida.</p>
+        <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+          <div>
+            <label>⏳ Música de espera:</label><br>
+            <input type="file" id="ambient-espera" accept="audio/*" style="display:inline; margin:6px 0;">
+            <div id="ambient-espera-current" class="hint"></div>
+          </div>
+          <div>
+            <label>🏆 Música de victoria:</label><br>
+            <input type="file" id="ambient-victoria" accept="audio/*" style="display:inline; margin:6px 0;">
+            <div id="ambient-victoria-current" class="hint"></div>
+          </div>
+        </div>
+      </div>
 
   <input type="text" id="quiz-title" placeholder="Título del quiz (ej: Música cristiana vol. 1)">
 
@@ -209,6 +228,44 @@ document.getElementById('delete-quiz-btn').addEventListener('click', async () =>
   render();
   loadQuizList();
 });
+
+/* ---- Música ambiental (espera/victoria) ---- */
+async function loadAmbientStatus() {
+  const res = await fetch('/api/ambient');
+  const d = await res.json() || {};
+  ['espera', 'victoria'].forEach(slot => {
+    const el = document.getElementById('ambient-' + slot + '-current');
+    if (!el) return;
+    el.innerHTML = d[slot]
+      ? `<audio controls src="${d[slot]}" style="height:30px; max-width:260px;"></audio>
+         <button class="ambient-del" data-slot="${slot}" style="font-size:.7rem; padding:4px 8px;">✕</button>`
+      : 'ninguna';
+  });
+}
+['espera', 'victoria'].forEach(slot => {
+  const input = document.getElementById('ambient-' + slot);
+  if (!input) return;
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('audio', file);
+    const res = await fetch('/api/ambient/' + slot, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) { alert(data.message); loadAmbientStatus(); }
+    else alert(data.error || 'Error al subir');
+    input.value = '';
+  });
+});
+document.addEventListener('click', async (e) => {
+  if (e.target.classList && e.target.classList.contains('ambient-del')) {
+    const slot = e.target.dataset.slot;
+    if (!confirm(`¿Quitar la música de ${slot}?`)) return;
+    await fetch('/api/ambient/' + slot, { method: 'DELETE' });
+    loadAmbientStatus();
+  }
+});
+loadAmbientStatus();
 
 document.getElementById('import-file').addEventListener('change', async e => {
   const file = e.target.files[0];

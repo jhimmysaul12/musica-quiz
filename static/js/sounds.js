@@ -1,5 +1,7 @@
-/* MÚSICA QUIZ — sonidos con Web Audio (sin archivos protegidos,
-   todo generado por código). Preparado para sonar sin deferir UX. */
+/* MÚSICA QUIZ — sonidos con Web Audio (bis) + música ambiental.
+   Generados localmente (sin archivos protegidos en el repo);
+   la música de espera/victoria se carga desde /static/sounds (la
+   sube el anfitrión en el editor). */
 const SFX = (() => {
   let ctx = null;
   function ensure() {
@@ -44,3 +46,39 @@ function bindCountdownTimer(secondsLeft, total) {
   }, 1000);
   return iv;
 }
+
+/* ---- Música ambiental: espera / victoria ----
+   Urls servidas por /api/ambient; el navegador cachea una copia.
+   Solo suena tras un gesto del usuario (política de autoplay). */
+const Ambient = (() => {
+  const audioEl = new Audio();
+  audioEl.loop = true;
+  audioEl.volume = 0.35;
+  let currentSlot = null;
+  let urls = {};
+
+  async function refresh() {
+    try {
+      const r = await fetch('/api/ambient');
+      urls = await r.json() || {};
+    } catch (e) { urls = {}; }
+  }
+  refresh();
+
+  return {
+    async play(slot) {
+      if (!urls[slot]) await refresh();
+      const url = urls[slot];
+      if (!url) return;  // sin música configurada: silencio elegante
+      if (currentSlot === slot && !audioEl.paused) return;
+      if (audioEl.src !== location.origin + url) audioEl.src = url;
+      audioEl.loop = (slot === 'espera');  // la victoria sonó UNA vez y termina
+      try { await audioEl.play(); currentSlot = slot; } catch (e) {}
+    },
+    stop() {
+      try { audioEl.pause(); audioEl.currentTime = 0; } catch (e) {}
+      currentSlot = null;
+    },
+    refresh,
+  };
+})();

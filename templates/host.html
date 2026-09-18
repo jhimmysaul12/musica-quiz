@@ -93,6 +93,7 @@ function showQuestion(data) {
   rView.style.display = 'none';
   goView.style.display = 'none';
   qView.style.display = 'block';
+  Ambient.stop();
   SFX.newQuestion();
 
   document.getElementById('q-category').textContent = data.category;
@@ -219,10 +220,13 @@ socket.on('game_over', (lb) => {
   qView.style.display = 'none';
   rView.style.display = 'none';
   goView.style.display = 'block';
+  Ambient.stop();
   SFX.victory(); confetti();
   // podio final: mismo TOP-3 con más protagonismo
   renderPodium(lb, 'podium');
   showRanking(document.getElementById('final-list'), lb);
+  // música de victoria (si se cargó una) — suena UNA vez
+  Ambient.play('victoria');
 });
 
 socket.on('game_reset', () => { alert('La partida se cerró.'); location.reload(); });

@@ -359,6 +359,61 @@ AUDIO_FOLDER = 'static/quiz-audio'
 AUDIO_EXTENSIONS = {'mp3', 'wav', 'ogg', 'm4a', 'aac', 'opus', 'webm'}
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
+# Música ambiental (espera/victoria) gestionada desde el editor
+AMBIENT_FILE = BASE_DIR / '.private' / 'ambient.json'
+AMBIENT_SLOTS = ('espera', 'victoria')
+
+
+def load_ambient():
+    try:
+        with open(AMBIENT_FILE, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_ambient(data):
+    with open(AMBIENT_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _Ambient_url(slot):
+    data = load_ambient()
+    fname = data.get(slot)
+    return f'/static/sounds/{fname}' if fname else None
+
+
+@app.route('/api/ambient', methods=['GET'])
+def api_ambient_get():
+    d = load_ambient()
+    return jsonify({slot: (f'/static/sounds/{d[slot]}' if d.get(slot) else None)
+                    for slot in AMBIENT_SLOTS})
+
+
+@app.route('/api/ambient/<slot>', methods=['POST', 'DELETE'])
+def api_ambient_set(slot):
+    if slot not in AMBIENT_SLOTS:
+        return jsonify({'error': f'Slot inválido: usa {", ".join(AMBIENT_SLOTS)}'}), 400
+    if request.method == 'DELETE':
+        d = load_ambient()
+        d.pop(slot, None)
+        save_ambient(d)
+        return jsonify({'message': f'Música de {slot} eliminada'})
+    if 'audio' not in request.files:
+        return jsonify({'error': 'Sin archivo de audio'}), 400
+    file = request.files['audio']
+    name = file.filename or ''
+    ext = name.rsplit('.', 1)[1].lower() if '.' in name else ''
+    if ext not in AUDIO_EXTENSIONS:
+        return jsonify({'error': f'Formato no permitido: usa {", ".join(sorted(AUDIO_EXTENSIONS))}'}), 400
+    fname = f'ambient_{slot}.{ext}'
+    file.save(BASE_DIR / 'static' / 'sounds' / fname)
+    d = load_ambient()
+    d[slot] = fname
+    save_ambient(d)
+    return jsonify({'message': f'Música de {slot} actualizada',
+                    'url': f'/static/sounds/{fname}'})
+
 
 @app.route('/api/upload_audio', methods=['POST'])
 def api_upload_audio():
