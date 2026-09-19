@@ -21,12 +21,19 @@
 <div id="wait-view" style="display:none;">
   <div class="my-avatar-big" id="my-avatar">🦁</div>
   <h2>¡Hola, <span id="nickname-display"></span>!</h2>
+  <p id="my-team-badge" class="team-badge" style="display:none;"></p>
   <p>Aguarda a que el anfitrión inicie el juego…</p>
   <p class="hint">Jugadores conectados: <span id="lobby-count">0</span></p>
 
   <!-- Lista en vivo de participantes -->
   <h3>👥 Participantes</h3>
   <ul id="player-list" class="player-list"></ul>
+
+  <!-- 🏅 Equipos (si modo activo) -->
+  <div id="teams-lobby" style="display:none;">
+    <h3>🏅 Equipos</h3>
+    <div id="teams-board-player" class="teams-board"></div>
+  </div>
 </div>
 
 <!-- PREGUNTA -->
@@ -57,6 +64,8 @@
 
   <!-- Posiciones cercanas (individuales) -->
   <div id="near-positions" class="near-positions"></div>
+  <!-- 🏅 Marcador de equipos (si activo) -->
+  <div id="teams-results-player" class="teams-scoreboard" style="display:none;"></div>
 </div>
 
 <!-- GAME OVER -->
@@ -64,6 +73,8 @@
   <h2 id="gameover-text"></h2>
   <p>Tu posición: <strong id="my-position"></strong></p>
   <p>Tus puntos: <strong id="go-score"></strong></p>
+  <h3>🏅 Podio de equipos</h3>
+  <div id="teams-go-player" class="teams-scoreboard" style="display:none;"></div>
   <h3>🏆 Podio final</h3>
   <div id="podium-individual" class="podium"></div>
   <h3>🏆 Ranking final</h3>
@@ -88,6 +99,13 @@ let timerIv = null;
 let mySid = null;
 let myName = null;
 let myAvatar = '🦁';
+let myTeamId = null;
+let myTeamNames = new Set();
+const TEAM_META = [
+  {nombre:'Equipo Roja', color:'#e11d48'}, {nombre:'Equipo Azul', color:'#2563eb'},
+  {nombre:'Equipo Amarilla', color:'#eab308'}, {nombre:'Equipo Verde', color:'#16a34a'},
+  {nombre:'Equipo Naranja', color:'#f97316'}, {nombre:'Equipo Violeta', color:'#7c3aed'},
+];
 
 /* ---- Avatares: animales bíblicos ---- */
 const ANIMALS = [
@@ -141,6 +159,7 @@ socket.on('connect', () => { mySid = socket.id; });
 socket.on('join_success', (d) => {
   myName = d.nickname;
   if (d.avatar) { myAvatar = d.avatar; localStorage.setItem('mqAvatar', d.avatar); }
+  myTeamId = (d.n_teams >= 2) ? d.team_id : null;
   joinView.style.display = 'none';
   waitView.style.display = 'block';
   document.getElementById('nickname-display').textContent = d.nickname;
@@ -164,6 +183,7 @@ function renderPlayerList(players, listId, ordered, numbered) {
   arr.forEach((p, i) => {
     const li = document.createElement('li');
     li.className = 'player-row';
+    if (myTeamNames.has(p.nickname)) li.classList.add('teammate-row');
     const rank = (ordered || numbered) ? `${i + 1}.` : '';
     li.innerHTML = `<span class="p-avatar">${p.avatar || '🦁'}</span>
       <span class="p-name">${rank} ${p.nickname}</span>
@@ -176,6 +196,32 @@ socket.on('update_player_list', (players) => {
   const c = document.getElementById('lobby-count');
   if (c) c.textContent = players.length;
   renderPlayerList(players, 'player-list', false);
+});
+
+/* equipos: estado del lobby maneado a la vista de espera */
+socket.on('update_teams', (teams) => {
+  const wrap = document.getElementById('teams-lobby');
+  if (!wrap) return;
+  if (!teams || teams.length === 0) {
+    wrap.style.display = 'none';
+    myTeamId = null;
+    document.getElementById('my-team-badge').style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  renderTeamsScoreboardPlayer(teams, document.getElementById('teams-board-player'), true);
+  const mine = teams.find(t => t.id === myTeamId);
+  const badge = document.getElementById('my-team-badge');
+  if (mine) {
+    badge.style.display = 'block';
+    badge.style.borderColor = mine.color;
+    badge.style.color = mine.color;
+    badge.textContent = `🏅 ${mine.nombre} — ${mine.members.length} integrantes`;
+    // resaltar mis colegas de equipo en la lista
+    myTeamNames = new Set(mine.members.map(m => m.nickname));
+  } else {
+    badge.style.display = 'none';
+  }
 });
 
 function showQuestion(data) {
@@ -341,12 +387,34 @@ socket.on('show_results', (data) => {
     if (p2.last_correct) SFX.correct(); else SFX.wrong();
   }
   renderNearPositions(lb);
+  // marcador de equipos si activo
+  const twP = document.getElementById('teams-results-player');
+  if (data.teams && data.teams.length && twP) {
+    twP.style.display = 'block';
+    renderTeamsScoreboardPlayer(data.teams, twP, true);
+  } else if (twP) twP.style.display = 'none';
   if (document.getElementById('my-position')) {
     document.getElementById('my-position').textContent = pos ? `#${pos}` : '—';
   }
 });
 
-socket.on('game_over', (lb) => {
+/* marcador de equipos para pantalla del jugador */
+function renderTeamsScoreboardPlayer(teams, el, compact) {
+  if (!el) return;
+  el.innerHTML = '';
+  const medal = ['🥇','🥈','🥉'];
+  teams.forEach((t, i) => {
+    const col = document.createElement('div');
+    col.className = 'team-col' + (t.id === myTeamId ? ' my-team' : '');
+    col.style.borderTopColor = t.color;
+    col.innerHTML = `${medal[i] || ''} <b style="color:${t.color};">${t.nombre}</b>
+      <div class="team-pts">${(t.score || 0).toLocaleString('es-PE')} pts</div>`;
+    el.appendChild(col);
+  });
+}
+
+socket.on('game_over', (payload) => {
+  const lb = payload.individual || payload;  // compat
   qView.style.display = 'none';
   rView.style.display = 'none';
   goView.style.display = 'block';
@@ -362,6 +430,12 @@ socket.on('game_over', (lb) => {
   else SFX.correct();
   // música de victoria ambiente (si el anfitrión la cargó)
   Ambient.play('victoria');
+  // podio de equipos primero (si activo)
+  const twGo = document.getElementById('teams-go-player');
+  if (payload.teams && payload.teams.length && twGo) {
+    twGo.style.display = 'block';
+    renderTeamsScoreboardPlayer(payload.teams, twGo, false);
+  } else if (twGo) twGo.style.display = 'none';
   renderIndividualPodium(lb, 'podium-individual');
   renderPlayerList(lb, 'go-rank', false, true);
 });

@@ -146,6 +146,31 @@ input:focus, textarea:focus { border-color: #a855f7; box-shadow: 0 0 10px rgba(1
   margin: 5px 0; padding: 8px 12px; border-radius: 999px;
 }
 
+/* ---- Badge de equipo propio + tablero de equipos ---- */
+.team-badge {
+  display: inline-block; padding: 5px 16px; border-radius: 999px;
+  border: 2px solid #ddd6fe; margin: 6px 0; font-weight: 800; font-size: .85rem;
+}
+.teams-board {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin-top: 10px;
+}
+.teams-scoreboard {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin: 10px auto;
+}
+.team-col {
+  background: #fff; border: 1px solid #eee; border-top: 5px solid #ddd;
+  border-radius: 12px; padding: 10px 14px; min-width: 128px;
+  font-weight: 700; color: #4c1d95;
+  animation: popIn .3s ease;
+}
+.team-pts { font-size: 1.15rem; color: #4c1d95; margin: 4px 0; }
+.team-members { font-size: .78rem; color: #555; font-weight: 500; line-height: 1.5; }
+.team-medal { font-size: 1.4rem; }
+.my-team { box-shadow: 0 0 0 3px #a855f755; border-color: #a855f7; }
+.teammate-row { background: linear-gradient(135deg, #7c3aed15, #c026d310); }
+
 /* ---- Podio ---- */
 .podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin-top: 24px; }
 .podium-slot {

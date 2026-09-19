@@ -9,6 +9,25 @@
   <p id="join-hint">Los jugadores escanean el QR o entran con el PIN en la página de union.</p>
   <h2>Aguardando jugadores...</h2>
   <ul id="player-list" class="player-list"></ul>
+
+  <!-- 🏅 Modo equipos -->
+  <div id="teams-setup" class="question-card" style="background:#fdf4ff; margin-top:14px;">
+    <h3 style="margin-bottom:6px;">👥 Equipos</h3>
+    <div id="teams-off">
+      <label>Numero de equipos:</label>
+      <select id="teams-count" style="display:inline-block; width:auto; padding:6px;">
+        <option value="0">Sin equipos (individual)</option>
+        <option value="2">2 equipos</option>
+        <option value="3">3 equipos</option>
+        <option value="4">4 equipos</option>
+        <option value="5">5 equipos</option>
+        <option value="6">6 equipos</option>
+      </select>
+      <button id="teams-apply-btn" style="font-size:.85rem; padding:8px 14px;">Aplicar</button>
+    </div>
+    <div id="teams-board" class="teams-board" style="display:none;"></div>
+  </div>
+
   <button id="start-btn" disabled>Iniciar (0 jugadores)</button>
   <button id="force-end-btn" style="display:none; background:linear-gradient(135deg,#dc2626,#991b1b);">Finalizar quiz</button>
 </div>
@@ -33,6 +52,12 @@
   <h2 id="results-correct"></h2>
   <p id="results-explanation" class="hint"></p>
 
+  <!-- 🏆 Podio por equipos (si modo equipos) -->
+  <div id="teams-podium-wrap" style="display:none;">
+    <h3>🏅 Marcador por equipos</h3>
+    <div id="teams-scoreboard" class="teams-scoreboard"></div>
+  </div>
+
   <!-- 🏆 Podio público: SOLO TOP 3 -->
   <h3>🏆 Podio</h3>
   <div id="podium-public" class="podium"></div>
@@ -43,7 +68,11 @@
 <!-- GAME OVER -->
 <div id="game-over-view" style="display:none;">
   <h1>🏆 Resultados finales</h1>
-  <h3>Podio final</h3>
+  <div id="go-teams-wrap" style="display:none;">
+    <h3>🏅 Podio de equipos</h3>
+    <div id="go-teams" class="teams-scoreboard"></div>
+  </div>
+  <h3>Podio individual</h3>
   <div class="podium podium-final" id="podium"></div>
   <h3>📋 Ranking completo (consulta)</h3>
   <ol id="final-list" class="player-list" style="text-align:left;"></ol>
@@ -67,6 +96,51 @@ const timerBar = document.getElementById('timer-bar');
 let timerIv = null;
 
 socket.emit('host_join', { pin: PIN });
+
+/* ---------- modo equipos ---------- */
+let nTeams = 0;
+function renderTeamsBoard(teams) {
+  const off = document.getElementById('teams-off');
+  const board = document.getElementById('teams-board');
+  if (!off || !board) return;
+  if (!teams || teams.length === 0) {
+    off.style.display = 'block';
+    board.style.display = 'none';
+    return;
+  }
+  off.style.display = 'none';
+  board.style.display = 'block';
+  board.innerHTML = '';
+  teams.forEach(t => {
+    const col = document.createElement('div');
+    col.className = 'team-col';
+    col.style.borderTopColor = t.color;
+    const names = t.members.map(m => m.avatar + ' ' + m.nickname).join('<br>')
+      || '<span class="hint">vacío</span>';
+    col.innerHTML = `<b style="color:${t.color};">${t.nombre}</b>
+      <div class="team-pts">${t.score} pts</div>
+      <div class="team-members">${names}</div>`;
+    board.appendChild(col);
+  });
+  // botón para volver a individual
+  const back = document.createElement('button');
+  back.textContent = '✕ Volver a individual';
+  back.style.cssText = 'font-size:.7rem; padding:5px 10px; margin-top:8px;';
+  back.onclick = () => socket.emit('setup_teams', { n: 0 });
+  board.appendChild(back);
+}
+
+document.getElementById('teams-apply-btn')?.addEventListener('click', () => {
+  const n = parseInt(document.getElementById('teams-count').value, 10) || 0;
+  socket.emit('setup_teams', { n });
+});
+
+socket.on('update_teams', (teams) => {
+  nTeams = teams.length;
+  renderTeamsBoard(teams);
+});
+
+socket.on('teams_error', (d) => alert(d.reason || 'Error en equipos'));
 
 /* ---------- utilidades visuales ---------- */
 function renderPlayers(players) {
@@ -212,17 +286,44 @@ socket.on('show_results', (data) => {
   document.getElementById('results-correct').textContent =
     `✅ ${data.correct_option_text}`;
   document.getElementById('results-explanation').textContent = data.explanation;
+  // marcador por equipos si el modo está activo
+  const tw = document.getElementById('teams-podium-wrap');
+  if (data.teams && data.teams.length) {
+    tw.style.display = 'block';
+    renderTeamsScoreboard(data.teams, document.getElementById('teams-scoreboard'));
+  } else if (tw) tw.style.display = 'none';
   renderPodium(data.leaderboard, 'podium-public');
 });
 
-socket.on('game_over', (lb) => {
+function renderTeamsScoreboard(teams, el) {
+  if (!el) return;
+  el.innerHTML = '';
+  teams.forEach((t, i) => {
+    const col = document.createElement('div');
+    col.className = 'team-col team-rank-' + (i + 1);
+    col.style.borderTopColor = t.color;
+    const medal = ['🥇','🥈','🥉'][i] || '';
+    col.innerHTML = `<div class="team-medal">${medal}</div>
+      <b style="color:${t.color};">${t.nombre}</b>
+      <div class="team-pts">${(t.score || 0).toLocaleString('es-PE')} pts</div>`;
+    el.appendChild(col);
+  });
+}
+
+socket.on('game_over', (payload) => {
+  const lb = payload.individual || payload;  // compat con payload antiguo
   lobby.style.display = 'none';
   qView.style.display = 'none';
   rView.style.display = 'none';
   goView.style.display = 'block';
   Ambient.stop();
   SFX.victory(); confetti();
-  // podio final: mismo TOP-3 con más protagonismo
+  // podio de equipos primero (si activo)
+  const tWrap = document.getElementById('go-teams-wrap');
+  if (payload.teams && payload.teams.length && tWrap) {
+    tWrap.style.display = 'block';
+    renderTeamsScoreboard(payload.teams, document.getElementById('go-teams'));
+  } else if (tWrap) tWrap.style.display = 'none';
   renderPodium(lb, 'podium');
   showRanking(document.getElementById('final-list'), lb);
   // música de victoria (si se cargó una) — suena UNA vez

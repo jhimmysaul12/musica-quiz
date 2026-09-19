@@ -105,6 +105,55 @@ class GameState:
         self.timer_finished = False
         self.quiz = load_quiz_data(quiz_name)
         self.tokens = {}        # session_token -> sid
+        self.teams = {}         # team_id (int) -> {nombre, color, puntos}
+        self.player_team = {}   # sid -> team_id
+        self.n_teams = 0        # 0 = sin equipos (individual)
+
+    def set_teams(self, n: int):
+        """Activar equipos (2-6) — solo en lobby."""
+        if n < 2 or n > 6:
+            return False
+        self.n_teams = n
+        colors = ['#e11d48', '#2563eb', '#eab308', '#16a34a', '#f97316', '#7c3aed']
+        names = ['Roja', 'Azul', 'Amarilla', 'Verde', 'Naranja', 'Violeta']
+        self.teams = {i: {'nombre': f'Equipo {names[i]}', 'color': colors[i], 'score': 0}
+                      for i in range(n)}
+        # reparto equilibrado round-robin de los ya presentes
+        for i, sid in enumerate(self.players.keys()):
+            team_id = i % n
+            self.player_team[sid] = team_id
+        return True
+
+    def team_of(self, sid):
+        return self.player_team.get(sid)
+
+    def teams_leaderboard(self):
+        rows = [{'id': t, **data} for t, data in self.teams.items()]
+        rows.sort(key=lambda x: x['score'], reverse=True)
+        return rows
+
+    def teams_state(self):
+        """Estado de equipos con miembros — para el rejunte del lobby."""
+        self.team_scores()
+        rows = []
+        for t, data in self.teams.items():
+            members = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '🦁')}
+                       for sid, p in self.players.items()
+                       if self.player_team.get(sid) == t]
+            rows.append({'id': t, **data, 'members': members})
+        rows.sort(key=lambda x: x['score'], reverse=True)
+        return rows
+
+    def team_scores(self):
+        """Recalcular el score de cada equipo como la suma de sus jugadores."""
+        totals = {t: 0 for t in self.teams}
+        for sid, p in self.players.items():
+            t = self.player_team.get(sid)
+            if t is not None and t in totals:
+                totals[t] += p['score']
+        for t, total in totals.items():
+            self.teams[t]['score'] = total
+        return totals
 
     def leaderboard(self):
         lb = [{'nickname': p['nickname'], 'avatar': p.get('avatar', '🦁'),
@@ -564,7 +613,9 @@ def on_host_join(data):
     PLAYER_TO_GAME[request.sid] = pin
     join_room(pin)
     emit('update_player_list', list(game.players.values()), to=pin)
-    emit('host_ready', {'pin': pin}, to=request.sid)
+    emit('host_ready', {'pin': pin,
+                        'n_teams': game.n_teams,
+                        'teams': game.teams_leaderboard()}, to=request.sid)
 
 
 # Avatares bíblicos: animales reconocibles de la Escritura
@@ -616,6 +667,13 @@ def on_player_join(data):
         'streak': 0,
         'last_pts': 0,
     }
+    # asignar equipo si el modo equipos está activo (al más pequeño)
+    if game.n_teams >= 2:
+        counts = {t: 0 for t in game.teams}
+        for t in game.player_team.values():
+            counts[t] = counts.get(t, 0) + 1
+        team_id = min(counts, key=lambda t: counts[t])
+        game.player_team[request.sid] = team_id
     PLAYER_TO_GAME[request.sid] = pin
     join_room(pin)
     # token de reconexión
@@ -623,9 +681,32 @@ def on_player_join(data):
     game.tokens[token] = request.sid
     emit('join_success', {'nickname': nickname, 'token': token,
                           'pin': pin,
-                          'avatar': avatar}, to=request.sid)
+                          'avatar': avatar,
+                          'team_id': game.player_team.get(request.sid),
+                          'n_teams': game.n_teams}, to=request.sid)
     socketio.emit('update_player_list', game.players_list(), to=pin)
+    if game.n_teams >= 2:
+        socketio.emit('update_teams', game.teams_state(), to=pin)
     print(f"Jugador '{nickname}' ({avatar}) entró a {pin}")
+
+
+@socketio.on('setup_teams')
+def on_setup_teams(data):
+    """Host configura N equipos (2-6) o desactiva (0/None). Solo en lobby."""
+    pin = PLAYER_TO_GAME.get(request.sid)
+    game = GAMES.get(pin) if pin else None
+    if game is None or request.sid != game.host_sid or game.state != STATE_LOBBY:
+        return emit('teams_error', {'reason': 'Solo en lobby'})
+    n = int((data or {}).get('n', 0) or 0)
+    if n == 0:
+        game.n_teams = 0
+        game.teams = {}
+        game.player_team = {}
+    elif not game.set_teams(n):
+        return emit('teams_error', {'reason': 'Equipos debe ser 2-6 (o 0 para individual)'})
+    socketio.emit('update_teams', game.teams_state(), to=pin)
+    if n == 0:
+        socketio.emit('update_teams', [], to=pin)
 
 
 @socketio.on('start_game')
@@ -655,7 +736,11 @@ def advance_question(pin: str):
     if q_index >= len(questions):
         lb = game.leaderboard()
         export_scores_csv(game)
-        socketio.emit('game_over', lb, to=pin)
+        go_payload = {'individual': lb}
+        if game.n_teams >= 2:
+            game.team_scores()
+            go_payload['teams'] = game.teams_leaderboard()
+        socketio.emit('game_over', go_payload, to=pin)
         game.state = STATE_GAMEOVER
         return
     game.state = STATE_QUESTION
@@ -743,7 +828,7 @@ def reveal_results(pin: str, auto=False):
 
     game.state = STATE_ANSWER
     # respuesta correcta solo se revela AHORA
-    socketio.emit('show_results', {
+    result_payload = {
         'correct_option': correct,
         'correct_option_text': q['options'][correct],
         'explanation': q.get('explanation', ''),
@@ -755,7 +840,11 @@ def reveal_results(pin: str, auto=False):
                      'last_correct': p.get('last_correct', False)}
                     for p in game.players.values()],
         'leaderboard': game.leaderboard()[:10],
-    }, to=pin)
+    }
+    if game.n_teams >= 2:
+        game.team_scores()
+        result_payload['teams'] = game.teams_leaderboard()
+    socketio.emit('show_results', result_payload, to=pin)
 
 
 @socketio.on('show_results')
@@ -775,7 +864,11 @@ def on_force_end_quiz():
         return
     lb = game.leaderboard()
     export_scores_csv(game)
-    socketio.emit('game_over', lb, to=pin)
+    go_payload = {'individual': lb}
+    if game.n_teams >= 2:
+        game.team_scores()
+        go_payload['teams'] = game.teams_leaderboard()
+    socketio.emit('game_over', go_payload, to=pin)
     game.state = STATE_GAMEOVER
     game.current_question = -1
     game.answers = {}
